@@ -1,0 +1,447 @@
+{% extends "admin/base_site.html" %}
+{% load i18n %}
+
+{% block title %}{{ title }} | {% trans "Django site admin" %}{% endblock %}
+
+{% block breadcrumbs %}
+<div class="breadcrumbs">
+  <a href="{% url 'admin:index' %}">{% trans "Home" %}</a>
+  &rsaquo; <a href="{% url 'admin:team_project_changelist' %}">Projects</a>
+  &rsaquo; {{ project.name }}
+</div>
+{% endblock %}
+
+{% block content %}
+<style>
+  .chat-container {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+  }
+  .project-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+  }
+  .status-badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: bold;
+    text-transform: uppercase;
+  }
+  .status-draft { background: #e9ecef; color: #495057; }
+  .status-planning { background: #cce5ff; color: #004085; }
+  .status-approved { background: #d4edda; color: #155724; }
+  .status-active { background: #d1ecf1; color: #0c5460; }
+
+  .messages-panel {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+  }
+  .messages-panel h2 {
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    border-bottom: 1px solid #ddd;
+    background: #f8f8f8;
+  }
+  .messages-list {
+    max-height: 500px;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .message {
+    padding: 10px 14px;
+    border-radius: 8px;
+    max-width: 85%;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-size: 13px;
+    line-height: 1.5;
+  }
+  .message--user {
+    background: #007bff;
+    color: #fff;
+    align-self: flex-end;
+  }
+  .message--assistant {
+    background: #f1f3f5;
+    color: #212529;
+    align-self: flex-start;
+  }
+  .message--processing {
+    background: #f1f3f5;
+    color: #868e96;
+    align-self: flex-start;
+    font-style: italic;
+  }
+
+  .chat-input-area {
+    display: flex;
+    gap: 8px;
+    padding: 12px;
+    border-top: 1px solid #ddd;
+  }
+  .chat-input-area textarea {
+    flex: 1;
+    padding: 8px 12px;
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    font-size: 13px;
+    resize: vertical;
+    min-height: 60px;
+    font-family: inherit;
+  }
+  .chat-input-area textarea:focus {
+    outline: none;
+    border-color: #007bff;
+  }
+  .btn-send {
+    padding: 8px 20px;
+    background: #007bff;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    align-self: flex-end;
+  }
+  .btn-send:hover { background: #0056b3; }
+  .btn-send:disabled { background: #6c757d; cursor: not-allowed; }
+
+  .btn-approve {
+    padding: 8px 20px;
+    background: #28a745;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: bold;
+  }
+  .btn-approve:hover { background: #1e7e34; }
+
+  .section-panel {
+    border: 1px solid #ddd;
+    border-radius: 4px;
+    background: #fff;
+  }
+  .section-panel h2 {
+    margin: 0;
+    padding: 12px 16px;
+    font-size: 14px;
+    font-weight: bold;
+    border-bottom: 1px solid #ddd;
+    background: #f8f8f8;
+  }
+  .section-panel .section-body {
+    padding: 16px;
+  }
+  .tech-spec-content {
+    width: 100%;
+    height: 300px;
+    font-family: monospace;
+    font-size: 12px;
+    border: 1px solid #ddd;
+    padding: 8px;
+    resize: vertical;
+    background: #f8f8f8;
+  }
+  .tasks-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  .tasks-table th {
+    background: #f8f8f8;
+    padding: 8px 12px;
+    text-align: left;
+    border-bottom: 2px solid #ddd;
+    font-weight: bold;
+  }
+  .tasks-table td {
+    padding: 8px 12px;
+    border-bottom: 1px solid #eee;
+    vertical-align: top;
+  }
+  .tasks-table tr:hover td { background: #f8f9fa; }
+  .task-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: bold;
+  }
+  .task-status-pending { background: #e9ecef; color: #495057; }
+  .task-status-in_progress { background: #cce5ff; color: #004085; }
+  .task-status-done { background: #d4edda; color: #155724; }
+
+  .empty-state {
+    padding: 40px;
+    text-align: center;
+    color: #868e96;
+    font-style: italic;
+  }
+</style>
+
+<div class="chat-container">
+
+  <!-- Project Header -->
+  <div class="project-header">
+    <div>
+      <strong>{{ project.name }}</strong>
+      {% if project.description %}
+        <span style="color: #666; margin-left: 12px;">{{ project.description }}</span>
+      {% endif %}
+    </div>
+    <div style="display: flex; align-items: center; gap: 12px;">
+      <span class="status-badge status-{{ project.status }}">{{ project.get_status_display }}</span>
+      {% if project.status == "planning" %}
+        <button class="btn-approve" id="btn-approve">Approve &amp; Generate Tasks</button>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Chat Messages -->
+  <div class="messages-panel">
+    <h2>Chat with Tech Lead</h2>
+    <div class="messages-list" id="messages-list">
+      {% for message in messages %}
+        {% if message.processing %}
+          <div class="message message--processing" data-message-id="{{ message.id }}">
+            Thinking...
+          </div>
+        {% else %}
+          <div class="message message--{{ message.role }}" data-message-id="{{ message.id }}">{{ message.content }}</div>
+        {% endif %}
+      {% empty %}
+        <div class="empty-state" id="empty-state">
+          Start chatting with the Tech Lead to plan your feature.
+        </div>
+      {% endfor %}
+    </div>
+    <div class="chat-input-area">
+      <textarea id="chat-input" placeholder="Describe your feature idea..." rows="3"></textarea>
+      <button class="btn-send" id="btn-send">Send</button>
+    </div>
+  </div>
+
+  <!-- TechSpec -->
+  {% if tech_spec %}
+  <div class="section-panel">
+    <h2>TechSpec <small style="font-weight:normal; color:#666;">(v{{ tech_spec.version }}, updated {{ tech_spec.updated_at|date:"N j, Y H:i" }})</small></h2>
+    <div class="section-body">
+      <textarea class="tech-spec-content" readonly>{{ tech_spec.content }}</textarea>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- DevTasks -->
+  {% if dev_tasks %}
+  <div class="section-panel">
+    <h2>Dev Tasks ({{ dev_tasks|length }})</h2>
+    <div class="section-body">
+      <table class="tasks-table">
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Title</th>
+            <th>Description</th>
+            <th>Status</th>
+            <th>Priority</th>
+            <th>Blocked By</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for task in dev_tasks %}
+          <tr>
+            <td>{{ forloop.counter }}</td>
+            <td><strong>{{ task.title }}</strong></td>
+            <td>{{ task.description }}</td>
+            <td><span class="task-status task-status-{{ task.status }}">{{ task.get_status_display }}</span></td>
+            <td>{{ task.priority }}</td>
+            <td>
+              {% for blocker in task.blocked_by.all %}
+                <span style="font-size:11px; background:#fff3cd; padding:2px 6px; border-radius:10px;">{{ blocker.title }}</span>
+              {% empty %}—{% endfor %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% elif project.status == "in_progress" or project.status == "approved" %}
+  <div class="section-panel">
+    <h2>Dev Tasks</h2>
+    <div class="empty-state">Generating tasks... refresh in a moment.</div>
+  </div>
+  {% endif %}
+
+</div>
+
+<script>
+(function () {
+  const projectId = {{ project.id }};
+  const msgList = document.getElementById('messages-list');
+  const chatInput = document.getElementById('chat-input');
+  const btnSend = document.getElementById('btn-send');
+  const btnApprove = document.getElementById('btn-approve');
+  let pollingInterval = null;
+
+  function scrollToBottom() {
+    msgList.scrollTop = msgList.scrollHeight;
+  }
+
+  function createMessageEl(role, content, messageId, processing) {
+    const div = document.createElement('div');
+    div.className = `message message--${processing ? 'processing' : role}`;
+    if (messageId) div.dataset.messageId = messageId;
+    div.textContent = processing ? 'Thinking...' : content;
+    return div;
+  }
+
+  function removeEmptyState() {
+    const empty = document.getElementById('empty-state');
+    if (empty) empty.remove();
+  }
+
+  function startPolling(assistantMsgId) {
+    if (pollingInterval) clearInterval(pollingInterval);
+    btnSend.disabled = true;
+
+    pollingInterval = setInterval(async function checkMessage() {
+      try {
+        const res = await fetch(`/api/messages/${assistantMsgId}/`);
+        if (!res.ok) return;
+        const data = await res.json();
+
+        if (!data.processing) {
+          clearInterval(pollingInterval);
+          pollingInterval = null;
+
+          const el = msgList.querySelector(`[data-message-id="${assistantMsgId}"]`);
+          if (el) {
+            el.className = 'message message--assistant';
+            el.textContent = data.content;
+          }
+          btnSend.disabled = false;
+          scrollToBottom();
+        }
+      } catch (err) {
+        console.error('Polling error:', err);
+      }
+    }, 2000);
+  }
+
+  async function sendMessage() {
+    const content = chatInput.value.trim();
+    if (!content) return;
+
+    chatInput.value = '';
+    btnSend.disabled = true;
+    removeEmptyState();
+
+    const userEl = createMessageEl('user', content, null, false);
+    msgList.appendChild(userEl);
+    scrollToBottom();
+
+    try {
+      const res = await fetch(`/api/projects/${projectId}/chat/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({ content }),
+      });
+
+      if (!res.ok) {
+        const err = await res.text();
+        const errEl = createMessageEl('assistant', `Error: ${err}`, null, false);
+        msgList.appendChild(errEl);
+        btnSend.disabled = false;
+        return;
+      }
+
+      const data = await res.json();
+      userEl.dataset.messageId = data.user_message_id;
+
+      const assistantEl = createMessageEl('assistant', '', data.assistant_message_id, true);
+      msgList.appendChild(assistantEl);
+      scrollToBottom();
+
+      startPolling(data.assistant_message_id);
+    } catch (err) {
+      console.error('Send error:', err);
+      const errEl = createMessageEl('assistant', `Error: ${err.message}`, null, false);
+      msgList.appendChild(errEl);
+      btnSend.disabled = false;
+    }
+  }
+
+  btnSend.addEventListener('click', sendMessage);
+
+  chatInput.addEventListener('keydown', function (e) {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+      e.preventDefault();
+      sendMessage();
+    }
+  });
+
+  if (btnApprove) {
+    btnApprove.addEventListener('click', async function () {
+      btnApprove.disabled = true;
+      btnApprove.textContent = 'Approving...';
+      try {
+        const res = await fetch(`/api/projects/${projectId}/approve/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+          },
+        });
+        if (res.ok) {
+          location.reload();
+        } else {
+          const err = await res.text();
+          alert(`Error: ${err}`);
+          btnApprove.disabled = false;
+          btnApprove.textContent = 'Approve & Generate Tasks';
+        }
+      } catch (err) {
+        alert(`Error: ${err.message}`);
+        btnApprove.disabled = false;
+        btnApprove.textContent = 'Approve & Generate Tasks';
+      }
+    });
+  }
+
+  // Resume polling if there's a processing message on page load
+  const processingEl = msgList.querySelector('.message--processing');
+  if (processingEl && processingEl.dataset.messageId) {
+    startPolling(parseInt(processingEl.dataset.messageId, 10));
+  }
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+  }
+
+  scrollToBottom();
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,123 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  <li>
+    <button type="button" class="addlink" id="btn-new-project"
+            style="background:none;border:none;cursor:pointer;font-size:inherit;padding:0;">
+      {% blocktranslate with cl.opts.verbose_name as name %}Add {{ name }}{% endblocktranslate %}
+    </button>
+  </li>
+{% endblock %}
+
+{% block footer %}
+{{ block.super }}
+
+<!-- New Project Modal -->
+<div id="idea-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:9999; align-items:center; justify-content:center;">
+  <div style="background:#fff; border-radius:6px; width:520px; max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,.25); overflow:hidden;">
+    <div style="padding:16px 20px; border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center;">
+      <strong style="font-size:15px;">New Project</strong>
+      <button id="idea-modal-close" type="button" style="background:none;border:none;cursor:pointer;font-size:20px;line-height:1;color:#666;">&times;</button>
+    </div>
+    <div style="padding:20px;">
+      <label for="idea-input" style="display:block; font-size:13px; font-weight:bold; margin-bottom:8px;">
+        Describe your project idea
+      </label>
+      <textarea id="idea-input"
+                placeholder="e.g. I want to build a website that lets users track their daily habits, set goals, and visualise progress over time."
+                rows="5"
+                style="width:100%; box-sizing:border-box; padding:10px 12px; font-size:13px; border:1px solid #ccc; border-radius:4px; resize:vertical; font-family:inherit;"></textarea>
+      <div id="idea-error" style="display:none; color:#dc3545; font-size:12px; margin-top:6px;"></div>
+    </div>
+    <div style="padding:12px 20px 16px; display:flex; justify-content:flex-end; gap:8px;">
+      <button id="idea-modal-cancel" type="button"
+              style="padding:8px 18px; background:#f8f8f8; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:13px;">
+        Cancel
+      </button>
+      <button id="idea-modal-submit" type="button"
+              style="padding:8px 18px; background:#007bff; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;">
+        Create Project
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function () {
+  const overlay = document.getElementById('idea-modal-overlay');
+  const input = document.getElementById('idea-input');
+  const submitBtn = document.getElementById('idea-modal-submit');
+  const errorEl = document.getElementById('idea-error');
+
+  function openModal() {
+    input.value = '';
+    errorEl.style.display = 'none';
+    submitBtn.disabled = false;
+    submitBtn.textContent = 'Create Project';
+    overlay.style.display = 'flex';
+    setTimeout(() => input.focus(), 50);
+  }
+
+  function closeModal() {
+    overlay.style.display = 'none';
+  }
+
+  document.getElementById('btn-new-project').addEventListener('click', openModal);
+  document.getElementById('idea-modal-close').addEventListener('click', closeModal);
+  document.getElementById('idea-modal-cancel').addEventListener('click', closeModal);
+
+  overlay.addEventListener('click', function (e) {
+    if (e.target === overlay) closeModal();
+  });
+
+  input.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') closeModal();
+  });
+
+  submitBtn.addEventListener('click', async function () {
+    const idea = input.value.trim();
+    if (!idea) {
+      errorEl.textContent = 'Please describe your project idea.';
+      errorEl.style.display = 'block';
+      return;
+    }
+
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Creating…';
+    errorEl.style.display = 'none';
+
+    try {
+      const res = await fetch('/api/projects/create-from-idea/', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'X-CSRFToken': getCookie('csrftoken'),
+        },
+        body: JSON.stringify({ idea }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(text || `HTTP ${res.status}`);
+      }
+
+      const data = await res.json();
+      window.location.href = `/admin/team/project/${data.project_id}/chat/`;
+    } catch (err) {
+      errorEl.textContent = `Error: ${err.message}`;
+      errorEl.style.display = 'block';
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Create Project';
+    }
+  });
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+  }
+})();
+</script>
+{% endblock %}
