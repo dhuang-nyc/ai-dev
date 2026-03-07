@@ -8,37 +8,176 @@
       {% blocktranslate with cl.opts.verbose_name as name %}Add {{ name }}{% endblocktranslate %}
     </button>
   </li>
+  <li>
+    <button type="button" id="btn-run-dev-agents"
+            style="background:none;border:none;cursor:pointer;font-size:inherit;padding:0;margin-left:8px;"
+            class="addlink">
+      ▶ Run Dev Agents
+    </button>
+  </li>
 {% endblock %}
 
 {% block footer %}
 {{ block.super }}
 
+<style>
+  /* ── Modal overlay ───────────────────────────────────────── */
+  #idea-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, .5);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ── Modal box ───────────────────────────────────────────── */
+  .modal-box {
+    background: #fff;
+    border-radius: 10px;
+    width: 540px;
+    max-width: 95vw;
+    box-shadow: 0 20px 60px rgba(0,0,0,.2), 0 0 0 1px rgba(0,0,0,.06);
+    overflow: hidden;
+    animation: modal-in 0.18s ease;
+  }
+  @keyframes modal-in {
+    from { opacity: 0; transform: scale(.96) translateY(8px); }
+    to   { opacity: 1; transform: none; }
+  }
+
+  /* ── Modal header ────────────────────────────────────────── */
+  .modal-header {
+    padding: 15px 20px;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: #f8fafc;
+  }
+  .modal-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #0f172a;
+  }
+  .modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    color: #94a3b8;
+    padding: 3px 7px;
+    border-radius: 4px;
+    transition: background 0.12s, color 0.12s;
+  }
+  .modal-close:hover { background: #f1f5f9; color: #475569; }
+
+  /* ── Modal body ──────────────────────────────────────────── */
+  .modal-body { padding: 20px; }
+
+  .modal-label {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: #374151;
+    margin-bottom: 8px;
+  }
+  .modal-textarea {
+    width: 100%;
+    box-sizing: border-box;
+    padding: 10px 12px;
+    font-size: 13px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
+    resize: vertical;
+    font-family: inherit;
+    color: #0f172a;
+    background: #fff;
+    line-height: 1.6;
+    transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  .modal-textarea:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+  }
+  .modal-textarea::placeholder { color: #94a3b8; }
+
+  .modal-error {
+    display: none;
+    color: #dc2626;
+    font-size: 12px;
+    margin-top: 6px;
+  }
+
+  /* ── Modal footer ────────────────────────────────────────── */
+  .modal-footer {
+    padding: 12px 20px 16px;
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    border-top: 1px solid #f1f5f9;
+    background: #fafafa;
+  }
+  .btn-modal-cancel {
+    padding: 8px 18px;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #475569;
+    font-weight: 500;
+    transition: background 0.12s, border-color 0.12s;
+  }
+  .btn-modal-cancel:hover { background: #e2e8f0; border-color: #cbd5e1; }
+
+  .btn-modal-submit {
+    padding: 8px 20px;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    box-shadow: 0 2px 6px rgba(99,102,241,.3);
+    transition: all 0.15s;
+  }
+  .btn-modal-submit:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(99,102,241,.35);
+  }
+  .btn-modal-submit:disabled {
+    background: #94a3b8;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+  }
+</style>
+
 <!-- New Project Modal -->
-<div id="idea-modal-overlay" style="display:none; position:fixed; inset:0; background:rgba(0,0,0,.45); z-index:9999; align-items:center; justify-content:center;">
-  <div style="background:#fff; border-radius:6px; width:520px; max-width:95vw; box-shadow:0 8px 32px rgba(0,0,0,.25); overflow:hidden;">
-    <div style="padding:16px 20px; border-bottom:1px solid #ddd; display:flex; justify-content:space-between; align-items:center;">
-      <strong style="font-size:15px;">New Project</strong>
-      <button id="idea-modal-close" type="button" style="background:none;border:none;cursor:pointer;font-size:20px;line-height:1;color:#666;">&times;</button>
+<div id="idea-modal-overlay">
+  <div class="modal-box">
+    <div class="modal-header">
+      <span class="modal-title">New Project</span>
+      <button id="idea-modal-close" type="button" class="modal-close">&times;</button>
     </div>
-    <div style="padding:20px;">
-      <label for="idea-input" style="display:block; font-size:13px; font-weight:bold; margin-bottom:8px;">
-        Describe your project idea
-      </label>
-      <textarea id="idea-input"
+    <div class="modal-body">
+      <label for="idea-input" class="modal-label">Describe your project idea</label>
+      <textarea id="idea-input" class="modal-textarea"
                 placeholder="e.g. I want to build a website that lets users track their daily habits, set goals, and visualise progress over time."
-                rows="5"
-                style="width:100%; box-sizing:border-box; padding:10px 12px; font-size:13px; border:1px solid #ccc; border-radius:4px; resize:vertical; font-family:inherit;"></textarea>
-      <div id="idea-error" style="display:none; color:#dc3545; font-size:12px; margin-top:6px;"></div>
+                rows="5"></textarea>
+      <div id="idea-error" class="modal-error"></div>
     </div>
-    <div style="padding:12px 20px 16px; display:flex; justify-content:flex-end; gap:8px;">
-      <button id="idea-modal-cancel" type="button"
-              style="padding:8px 18px; background:#f8f8f8; border:1px solid #ccc; border-radius:4px; cursor:pointer; font-size:13px;">
-        Cancel
-      </button>
-      <button id="idea-modal-submit" type="button"
-              style="padding:8px 18px; background:#007bff; color:#fff; border:none; border-radius:4px; cursor:pointer; font-size:13px; font-weight:bold;">
-        Create Project
-      </button>
+    <div class="modal-footer">
+      <button id="idea-modal-cancel" type="button" class="btn-modal-cancel">Cancel</button>
+      <button id="idea-modal-submit" type="button" class="btn-modal-submit">Create Project &rarr;</button>
     </div>
   </div>
 </div>
@@ -54,7 +193,7 @@
     input.value = '';
     errorEl.style.display = 'none';
     submitBtn.disabled = false;
-    submitBtn.textContent = 'Create Project';
+    submitBtn.textContent = 'Create Project \u2192';
     overlay.style.display = 'flex';
     setTimeout(() => input.focus(), 50);
   }
@@ -84,7 +223,7 @@
     }
 
     submitBtn.disabled = true;
-    submitBtn.textContent = 'Creating…';
+    submitBtn.textContent = 'Creating\u2026';
     errorEl.style.display = 'none';
 
     try {
@@ -108,13 +247,46 @@
       errorEl.textContent = `Error: ${err.message}`;
       errorEl.style.display = 'block';
       submitBtn.disabled = false;
-      submitBtn.textContent = 'Create Project';
+      submitBtn.textContent = 'Create Project \u2192';
     }
   });
 
   function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+  }
+})();
+
+(function () {
+  const btn = document.getElementById('btn-run-dev-agents');
+
+  btn.addEventListener('click', async function () {
+    btn.disabled = true;
+    btn.textContent = 'Triggering\u2026';
+
+    try {
+      const res = await fetch('/api/dev-agent/run/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCsrfToken() },
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+      btn.textContent = `\u2713 ${data.message}`;
+      setTimeout(() => {
+        btn.textContent = '\u25b6 Run Dev Agents';
+        btn.disabled = false;
+      }, 4000);
+    } catch (err) {
+      btn.textContent = `\u2717 ${err.message}`;
+      btn.disabled = false;
+    }
+  });
+
+  function getCsrfToken() {
+    const value = `; ${document.cookie}`;
+    const parts = value.split('; csrftoken=');
     if (parts.length === 2) return parts.pop().split(';').shift();
     return '';
   }

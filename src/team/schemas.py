@@ -36,6 +36,12 @@ class ApproveResponseSchema(Schema):
     message: str
 
 
+class StartProjectResponseSchema(Schema):
+    status: str
+    github_repo_url: Optional[str]
+    github_error: Optional[str]
+
+
 class CreateFromIdeaRequestSchema(Schema):
     idea: str
 
@@ -43,3 +49,17 @@ class CreateFromIdeaRequestSchema(Schema):
 class CreateFromIdeaResponseSchema(Schema):
     project_id: int
     assistant_message_id: int
+
+
+class RunDevAgentsResponseSchema(Schema):
+    queued: int
+    skipped: int
+    message: str
+
+
+class ProjectStatusResponseSchema(Schema):
+    status: str
+
+
+class ProjectDeleteResponseSchema(Schema):
+    deleted: bool

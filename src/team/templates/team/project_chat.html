@@ -13,185 +13,383 @@
 
 {% block content %}
 <style>
+  /* ── Layout ──────────────────────────────────────────────── */
   .chat-container {
     display: flex;
     flex-direction: column;
-    gap: 20px;
+    gap: 18px;
+    max-width: 1100px;
   }
+
+  /* ── Project header ──────────────────────────────────────── */
   .project-header {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 12px 16px;
-    background: #f8f8f8;
-    border: 1px solid #ddd;
-    border-radius: 4px;
-  }
-  .status-badge {
-    display: inline-block;
-    padding: 4px 10px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: bold;
-    text-transform: uppercase;
-  }
-  .status-draft { background: #e9ecef; color: #495057; }
-  .status-planning { background: #cce5ff; color: #004085; }
-  .status-approved { background: #d4edda; color: #155724; }
-  .status-active { background: #d1ecf1; color: #0c5460; }
-
-  .messages-panel {
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    padding: 14px 18px;
     background: #fff;
-  }
-  .messages-panel h2 {
-    margin: 0;
-    padding: 12px 16px;
-    font-size: 14px;
-    font-weight: bold;
-    border-bottom: 1px solid #ddd;
-    background: #f8f8f8;
-  }
-  .messages-list {
-    max-height: 500px;
-    overflow-y: auto;
-    padding: 16px;
-    display: flex;
-    flex-direction: column;
+    border: 1px solid #e2e8f0;
+    border-left: 4px solid #6366f1;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.06);
     gap: 12px;
   }
+  .project-title { font-size: 16px; font-weight: 700; color: #0f172a; }
+  .project-desc  { font-size: 13px; color: #64748b; margin-top: 3px; }
+
+  /* ── Status badges ───────────────────────────────────────── */
+  .status-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    white-space: nowrap;
+  }
+  .status-draft       { background: #f1f5f9; color: #475569; }
+  .status-planning    { background: #dbeafe; color: #1d4ed8; }
+  .status-approved    { background: #dcfce7; color: #166534; }
+  .status-in_progress { background: #cffafe; color: #164e63; }
+  .status-completed   { background: #dcfce7; color: #14532d; }
+  .status-aborted     { background: #fee2e2; color: #991b1b; }
+
+  /* ── Action buttons (approve / start) ───────────────────── */
+  .btn-approve,
+  .btn-start {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s;
+    white-space: nowrap;
+  }
+  .btn-approve {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 2px 6px rgba(16,185,129,.3);
+  }
+  .btn-approve:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    box-shadow: 0 3px 10px rgba(16,185,129,.4);
+    transform: translateY(-1px);
+  }
+  .btn-start {
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    box-shadow: 0 2px 6px rgba(99,102,241,.3);
+  }
+  .btn-start:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+    box-shadow: 0 3px 10px rgba(99,102,241,.4);
+    transform: translateY(-1px);
+  }
+  .btn-approve:disabled,
+  .btn-start:disabled {
+    background: #94a3b8;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .btn-complete {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s;
+    white-space: nowrap;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 2px 6px rgba(16,185,129,.3);
+  }
+  .btn-complete:hover {
+    background: linear-gradient(135deg, #059669 0%, #047857 100%);
+    box-shadow: 0 3px 10px rgba(16,185,129,.4);
+    transform: translateY(-1px);
+  }
+  .btn-abort {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 8px 18px;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 600;
+    transition: all 0.15s;
+    white-space: nowrap;
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 2px 6px rgba(239,68,68,.3);
+  }
+  .btn-abort:hover {
+    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
+    box-shadow: 0 3px 10px rgba(239,68,68,.4);
+    transform: translateY(-1px);
+  }
+  .btn-complete:disabled,
+  .btn-abort:disabled {
+    background: #94a3b8;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+  }
+  .start-error {
+    font-size: 12px;
+    color: #dc2626;
+    margin-top: 4px;
+  }
+
+  /* ── Cards ───────────────────────────────────────────────── */
+  .card {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    box-shadow: 0 1px 4px rgba(0,0,0,.05);
+    overflow: hidden;
+  }
+  .card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 11px 16px;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+    font-size: 13px;
+    font-weight: 600;
+    color: #1e293b;
+  }
+  .card-icon {
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #6366f1;
+    color: #fff;
+    border-radius: 5px;
+    font-size: 12px;
+    flex-shrink: 0;
+  }
+  .card-meta {
+    font-weight: 400;
+    color: #94a3b8;
+    margin-left: auto;
+    font-size: 12px;
+  }
+
+  /* ── Messages list ───────────────────────────────────────── */
+  .messages-list {
+    max-height: 520px;
+    overflow-y: auto;
+    padding: 18px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    background: #fafbff;
+  }
+  .messages-list::-webkit-scrollbar        { width: 5px; }
+  .messages-list::-webkit-scrollbar-track  { background: transparent; }
+  .messages-list::-webkit-scrollbar-thumb  { background: #cbd5e1; border-radius: 3px; }
+
   .message {
     padding: 10px 14px;
-    border-radius: 8px;
-    max-width: 85%;
+    border-radius: 10px;
+    max-width: 82%;
     white-space: pre-wrap;
     word-break: break-word;
     font-size: 13px;
-    line-height: 1.5;
+    line-height: 1.6;
   }
   .message--user {
-    background: #007bff;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
     color: #fff;
     align-self: flex-end;
+    border-bottom-right-radius: 3px;
+    box-shadow: 0 2px 6px rgba(99,102,241,.25);
   }
   .message--assistant {
-    background: #f1f3f5;
-    color: #212529;
+    background: #fff;
+    color: #0f172a;
     align-self: flex-start;
-  }
-  .message--processing {
-    background: #f1f3f5;
-    color: #868e96;
-    align-self: flex-start;
-    font-style: italic;
+    border: 1px solid #e2e8f0;
+    border-bottom-left-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
   }
 
+  /* ── Animated typing indicator ───────────────────────────── */
+  .message--processing {
+    background: #fff;
+    align-self: flex-start;
+    border: 1px solid #e2e8f0;
+    border-bottom-left-radius: 3px;
+    box-shadow: 0 1px 3px rgba(0,0,0,.06);
+    padding: 13px 16px;
+  }
+  .typing-dots {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+  }
+  .typing-dots span {
+    width: 7px;
+    height: 7px;
+    background: #94a3b8;
+    border-radius: 50%;
+    display: inline-block;
+    animation: typing-bounce 1.3s ease-in-out infinite;
+  }
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes typing-bounce {
+    0%, 60%, 100% { transform: translateY(0); opacity: .4; }
+    30%            { transform: translateY(-6px); opacity: 1; }
+  }
+
+  /* ── Chat input area ─────────────────────────────────────── */
   .chat-input-area {
     display: flex;
     gap: 8px;
     padding: 12px;
-    border-top: 1px solid #ddd;
+    border-top: 1px solid #e2e8f0;
+    background: #f8fafc;
   }
   .chat-input-area textarea {
     flex: 1;
-    padding: 8px 12px;
-    border: 1px solid #ddd;
-    border-radius: 4px;
+    padding: 9px 12px;
+    border: 1px solid #cbd5e1;
+    border-radius: 6px;
     font-size: 13px;
     resize: vertical;
     min-height: 60px;
     font-family: inherit;
+    background: #fff;
+    color: #0f172a;
+    line-height: 1.5;
+    transition: border-color 0.15s, box-shadow 0.15s;
   }
   .chat-input-area textarea:focus {
     outline: none;
-    border-color: #007bff;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,.15);
   }
+  .chat-input-area textarea::placeholder { color: #94a3b8; }
+
   .btn-send {
-    padding: 8px 20px;
-    background: #007bff;
+    padding: 9px 20px;
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
     color: #fff;
     border: none;
-    border-radius: 4px;
+    border-radius: 6px;
     cursor: pointer;
     font-size: 13px;
+    font-weight: 600;
     align-self: flex-end;
+    box-shadow: 0 2px 6px rgba(99,102,241,.25);
+    transition: all 0.15s;
+    white-space: nowrap;
   }
-  .btn-send:hover { background: #0056b3; }
-  .btn-send:disabled { background: #6c757d; cursor: not-allowed; }
+  .btn-send:hover {
+    background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(99,102,241,.35);
+  }
+  .btn-send:disabled {
+    background: #94a3b8;
+    box-shadow: none;
+    cursor: not-allowed;
+    transform: none;
+  }
 
-  .btn-approve {
-    padding: 8px 20px;
-    background: #28a745;
-    color: #fff;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
-    font-size: 13px;
-    font-weight: bold;
-  }
-  .btn-approve:hover { background: #1e7e34; }
+  /* ── Section body ────────────────────────────────────────── */
+  .section-body { padding: 16px; }
 
-  .section-panel {
-    border: 1px solid #ddd;
-    border-radius: 4px;
-    background: #fff;
-  }
-  .section-panel h2 {
-    margin: 0;
-    padding: 12px 16px;
-    font-size: 14px;
-    font-weight: bold;
-    border-bottom: 1px solid #ddd;
-    background: #f8f8f8;
-  }
-  .section-panel .section-body {
-    padding: 16px;
-  }
+  /* ── TechSpec textarea ───────────────────────────────────── */
   .tech-spec-content {
     width: 100%;
-    height: 300px;
-    font-family: monospace;
+    height: 320px;
+    font-family: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
     font-size: 12px;
-    border: 1px solid #ddd;
-    padding: 8px;
+    border: 1px solid #e2e8f0;
+    border-radius: 6px;
+    padding: 12px;
     resize: vertical;
-    background: #f8f8f8;
+    background: #f8fafc;
+    color: #0f172a;
+    line-height: 1.7;
+    box-sizing: border-box;
   }
+
+  /* ── Dev tasks table ─────────────────────────────────────── */
   .tasks-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
   }
   .tasks-table th {
-    background: #f8f8f8;
-    padding: 8px 12px;
+    background: #1e293b;
+    color: #e2e8f0;
+    padding: 10px 14px;
     text-align: left;
-    border-bottom: 2px solid #ddd;
-    font-weight: bold;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
   }
   .tasks-table td {
-    padding: 8px 12px;
-    border-bottom: 1px solid #eee;
+    padding: 10px 14px;
+    border-bottom: 1px solid #f1f5f9;
     vertical-align: top;
+    color: #1e293b;
   }
-  .tasks-table tr:hover td { background: #f8f9fa; }
-  .task-status {
-    display: inline-block;
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 11px;
-    font-weight: bold;
-  }
-  .task-status-pending { background: #e9ecef; color: #495057; }
-  .task-status-in_progress { background: #cce5ff; color: #004085; }
-  .task-status-done { background: #d4edda; color: #155724; }
+  .tasks-table tbody tr:last-child td { border-bottom: none; }
+  .tasks-table tbody tr:hover td { background: #fafbff; }
+  .tasks-table td:first-child { color: #94a3b8; font-size: 12px; font-weight: 600; width: 36px; }
 
+  .task-status {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 9px;
+    border-radius: 20px;
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+  }
+  .task-status-pending     { background: #f1f5f9; color: #475569; }
+  .task-status-in_progress { background: #dbeafe; color: #1d4ed8; }
+  .task-status-done        { background: #dcfce7; color: #166534; }
+
+  .blocker-tag {
+    display: inline-block;
+    font-size: 11px;
+    background: #fef3c7;
+    color: #92400e;
+    padding: 2px 7px;
+    border-radius: 10px;
+    border: 1px solid #fde68a;
+    margin: 1px 2px;
+  }
+
+  /* ── Empty states ────────────────────────────────────────── */
   .empty-state {
-    padding: 40px;
+    padding: 40px 20px;
     text-align: center;
-    color: #868e96;
-    font-style: italic;
+    color: #94a3b8;
+    font-size: 13px;
   }
 </style>
 
@@ -200,27 +398,50 @@
   <!-- Project Header -->
   <div class="project-header">
     <div>
-      <strong>{{ project.name }}</strong>
+      <div class="project-title">{{ project.name }}</div>
       {% if project.description %}
-        <span style="color: #666; margin-left: 12px;">{{ project.description }}</span>
+        <div class="project-desc">{{ project.description }}</div>
       {% endif %}
+      <div id="github-repo-container" style="margin-top:5px;{% if not project.github_repo_url %}display:none;{% endif %}">
+        {% if project.github_repo_url %}
+          <a href="{{ project.github_repo_url }}" target="_blank" rel="noopener"
+             style="font-size:12px;color:#6366f1;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+            &#x1F517; {{ project.github_repo_url|slice:"19:" }}
+          </a>
+        {% endif %}
+      </div>
     </div>
-    <div style="display: flex; align-items: center; gap: 12px;">
-      <span class="status-badge status-{{ project.status }}">{{ project.get_status_display }}</span>
-      {% if project.status == "planning" %}
-        <button class="btn-approve" id="btn-approve">Approve &amp; Generate Tasks</button>
-      {% endif %}
+    <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex-shrink:0;">
+      <div style="display:flex;align-items:center;gap:12px;">
+        <span class="status-badge status-{{ project.status }}" id="status-badge">{{ project.get_status_display }}</span>
+        {% if project.status == "planning" %}
+          <button class="btn-approve" id="btn-approve">&#10003; Approve &amp; Generate Tasks</button>
+        {% elif project.status == "approved" %}
+          <button class="btn-start" id="btn-start">&#9654; Start Project</button>
+        {% endif %}
+        {% if project.status != "completed" and project.status != "aborted" %}
+          {% if project.status == "in_progress" %}
+            <button class="btn-complete" id="btn-complete">&#10003; Mark Complete</button>
+          {% endif %}
+          <button class="btn-abort" id="btn-abort">&#10005; Abort</button>
+        {% endif %}
+      </div>
+      <div id="start-error" class="start-error" style="display:none;"></div>
     </div>
   </div>
 
-  <!-- Chat Messages -->
-  <div class="messages-panel">
-    <h2>Chat with Tech Lead</h2>
+  <!-- Chat -->
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">&#9679;</div>
+      Chat with Tech Lead
+      <span class="card-meta">Ctrl+Enter to send</span>
+    </div>
     <div class="messages-list" id="messages-list">
       {% for message in messages %}
         {% if message.processing %}
           <div class="message message--processing" data-message-id="{{ message.id }}">
-            Thinking...
+            <div class="typing-dots"><span></span><span></span><span></span></div>
           </div>
         {% else %}
           <div class="message message--{{ message.role }}" data-message-id="{{ message.id }}">{{ message.content }}</div>
@@ -232,26 +453,34 @@
       {% endfor %}
     </div>
     <div class="chat-input-area">
-      <textarea id="chat-input" placeholder="Describe your feature idea..." rows="3"></textarea>
-      <button class="btn-send" id="btn-send">Send</button>
+      <textarea id="chat-input" placeholder="Describe your feature idea or ask a question..." rows="3"></textarea>
+      <button class="btn-send" id="btn-send">Send &rarr;</button>
     </div>
   </div>
 
   <!-- TechSpec -->
   {% if tech_spec %}
-  <div class="section-panel">
-    <h2>TechSpec <small style="font-weight:normal; color:#666;">(v{{ tech_spec.version }}, updated {{ tech_spec.updated_at|date:"N j, Y H:i" }})</small></h2>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">S</div>
+      TechSpec
+      <span class="card-meta">v{{ tech_spec.version }} &middot; {{ tech_spec.updated_at|date:"N j, Y H:i" }}</span>
+    </div>
     <div class="section-body">
       <textarea class="tech-spec-content" readonly>{{ tech_spec.content }}</textarea>
     </div>
   </div>
   {% endif %}
 
-  <!-- DevTasks -->
+  <!-- Dev Tasks -->
   {% if dev_tasks %}
-  <div class="section-panel">
-    <h2>Dev Tasks ({{ dev_tasks|length }})</h2>
-    <div class="section-body">
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">T</div>
+      Dev Tasks
+      <span class="card-meta">{{ dev_tasks|length }} task{{ dev_tasks|length|pluralize }}</span>
+    </div>
+    <div style="overflow-x:auto;">
       <table class="tasks-table">
         <thead>
           <tr>
@@ -268,13 +497,13 @@
           <tr>
             <td>{{ forloop.counter }}</td>
             <td><strong>{{ task.title }}</strong></td>
-            <td>{{ task.description }}</td>
+            <td style="max-width:320px;color:#475569;">{{ task.description }}</td>
             <td><span class="task-status task-status-{{ task.status }}">{{ task.get_status_display }}</span></td>
-            <td>{{ task.priority }}</td>
+            <td style="font-size:12px;">{{ task.priority }}</td>
             <td>
               {% for blocker in task.blocked_by.all %}
-                <span style="font-size:11px; background:#fff3cd; padding:2px 6px; border-radius:10px;">{{ blocker.title }}</span>
-              {% empty %}—{% endfor %}
+                <span class="blocker-tag">{{ blocker.title }}</span>
+              {% empty %}<span style="color:#cbd5e1;">&#8212;</span>{% endfor %}
             </td>
           </tr>
           {% endfor %}
@@ -283,9 +512,12 @@
     </div>
   </div>
   {% elif project.status == "in_progress" or project.status == "approved" %}
-  <div class="section-panel">
-    <h2>Dev Tasks</h2>
-    <div class="empty-state">Generating tasks... refresh in a moment.</div>
+  <div class="card">
+    <div class="card-header">
+      <div class="card-icon">T</div>
+      Dev Tasks
+    </div>
+    <div class="empty-state">Generating tasks&hellip; refresh in a moment.</div>
   </div>
   {% endif %}
 
@@ -306,9 +538,14 @@
 
   function createMessageEl(role, content, messageId, processing) {
     const div = document.createElement('div');
-    div.className = `message message--${processing ? 'processing' : role}`;
+    if (processing) {
+      div.className = 'message message--processing';
+      div.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+    } else {
+      div.className = `message message--${role}`;
+      div.textContent = content;
+    }
     if (messageId) div.dataset.messageId = messageId;
-    div.textContent = processing ? 'Thinking...' : content;
     return div;
   }
 
@@ -403,7 +640,7 @@
   if (btnApprove) {
     btnApprove.addEventListener('click', async function () {
       btnApprove.disabled = true;
-      btnApprove.textContent = 'Approving...';
+      btnApprove.textContent = 'Approving\u2026';
       try {
         const res = await fetch(`/api/projects/${projectId}/approve/`, {
           method: 'POST',
@@ -418,12 +655,118 @@
           const err = await res.text();
           alert(`Error: ${err}`);
           btnApprove.disabled = false;
-          btnApprove.textContent = 'Approve & Generate Tasks';
+          btnApprove.textContent = '\u2713 Approve & Generate Tasks';
         }
       } catch (err) {
         alert(`Error: ${err.message}`);
         btnApprove.disabled = false;
-        btnApprove.textContent = 'Approve & Generate Tasks';
+        btnApprove.textContent = '\u2713 Approve & Generate Tasks';
+      }
+    });
+  }
+
+  const btnStart = document.getElementById('btn-start');
+  const startError = document.getElementById('start-error');
+
+  if (btnStart) {
+    btnStart.addEventListener('click', async function () {
+      btnStart.disabled = true;
+      btnStart.textContent = 'Starting\u2026';
+      startError.style.display = 'none';
+
+      try {
+        const res = await fetch(`/api/projects/${projectId}/start/`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'X-CSRFToken': getCookie('csrftoken'),
+          },
+        });
+
+        if (!res.ok) {
+          const err = await res.text();
+          startError.textContent = `Error: ${err}`;
+          startError.style.display = 'block';
+          btnStart.disabled = false;
+          btnStart.textContent = '\u25b6 Start Project';
+          return;
+        }
+
+        const data = await res.json();
+
+        // Update status badge
+        const badge = document.getElementById('status-badge');
+        if (badge) {
+          badge.className = 'status-badge status-in_progress';
+          badge.textContent = 'In Progress';
+        }
+
+        // Show GitHub repo URL if returned
+        if (data.github_repo_url) {
+          const repoContainer = document.getElementById('github-repo-container');
+          if (repoContainer) {
+            repoContainer.innerHTML =
+              `<a href="${data.github_repo_url}" target="_blank" rel="noopener"
+                 style="font-size:12px;color:#6366f1;text-decoration:none;display:inline-flex;align-items:center;gap:4px;">
+                 &#x1F517; ${data.github_repo_url.slice(19)}
+               </a>`;
+            repoContainer.style.display = 'block';
+          }
+        }
+
+        // Show non-fatal GitHub error (project still started)
+        if (data.github_error) {
+          startError.textContent = `Note: GitHub repo not created \u2014 ${data.github_error}`;
+          startError.style.display = 'block';
+        }
+
+        btnStart.remove();
+      } catch (err) {
+        startError.textContent = `Error: ${err.message}`;
+        startError.style.display = 'block';
+        btnStart.disabled = false;
+        btnStart.textContent = '\u25b6 Start Project';
+      }
+    });
+  }
+
+  async function markStatus(status, btn, label) {
+    btn.disabled = true;
+    btn.textContent = 'Updating\u2026';
+    try {
+      const res = await fetch(`/api/projects/${projectId}/mark-status/?status=${status}`, {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+      });
+      if (res.ok) {
+        location.reload();
+      } else {
+        const err = await res.text();
+        alert(`Error: ${err}`);
+        btn.disabled = false;
+        btn.textContent = label;
+      }
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+      btn.disabled = false;
+      btn.textContent = label;
+    }
+  }
+
+  const btnComplete = document.getElementById('btn-complete');
+  if (btnComplete) {
+    btnComplete.addEventListener('click', function () {
+      if (confirm('Mark this project as completed?')) {
+        markStatus('completed', btnComplete, '\u2713 Mark Complete');
+      }
+    });
+  }
+
+  const btnAbort = document.getElementById('btn-abort');
+  if (btnAbort) {
+    btnAbort.addEventListener('click', function () {
+      if (confirm('Abort this project? This cannot be undone.')) {
+        markStatus('aborted', btnAbort, '\u2715 Abort');
       }
     });
   }

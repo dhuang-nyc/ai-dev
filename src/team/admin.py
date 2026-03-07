@@ -2,16 +2,27 @@ from django.contrib import admin
 from django.http import HttpResponseRedirect
 from django.shortcuts import get_object_or_404, render
 from django.urls import path, reverse
+from django.utils.html import format_html
 
-from .models import Conversation, DevTask, Message, Project, TechSpec
+from .models import Conversation, DevTask, Message, Project, TechSpec, Workspace
 
 
 @admin.register(Project)
 class ProjectAdmin(admin.ModelAdmin):
-    list_display = ["name", "status", "created_at", "updated_at"]
+    list_display = ["name", "status", "github_repo_link", "created_at", "updated_at"]
     list_filter = ["status"]
     search_fields = ["name", "description"]
     change_list_template = "team/project_changelist.html"
+
+    @admin.display(description="GitHub Repo")
+    def github_repo_link(self, obj):
+        if obj.github_repo_url:
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener">&#x1F517; {}</a>',
+                obj.github_repo_url,
+                obj.github_repo_url.removeprefix("https://github.com/"),
+            )
+        return "—"
 
     def change_view(self, request, object_id, form_url="", extra_context=None):
         return HttpResponseRedirect(
@@ -66,7 +77,35 @@ class ProjectAdmin(admin.ModelAdmin):
 
 @admin.register(DevTask)
 class DevTaskAdmin(admin.ModelAdmin):
-    list_display = ["title", "project", "status", "priority", "order"]
+    list_display = ["title", "project", "status", "priority", "order", "pr_link"]
     list_filter = ["status", "project"]
     search_fields = ["title", "description"]
     filter_horizontal = ["blocked_by"]
+    readonly_fields = ["pr_link", "agent_log"]
+
+    @admin.display(description="PR")
+    def pr_link(self, obj):
+        if obj.pr_url:
+            return format_html(
+                '<a href="{}" target="_blank" rel="noopener">&#x1F517; PR</a>',
+                obj.pr_url,
+            )
+        return "—"
+
+
+@admin.register(Workspace)
+class WorkspaceAdmin(admin.ModelAdmin):
+    list_display = ["name", "is_available", "current_task_link", "path"]
+
+    @admin.display(description="Current Task")
+    def current_task_link(self, obj):
+        if obj.current_task:
+            url = reverse("admin:team_devtask_change", args=[obj.current_task.id])
+            return format_html('<a href="{}">{}</a>', url, obj.current_task)
+        return "—"
+
+    @admin.display(description="Path")
+    def path(self, obj):
+        return obj.path
+
+

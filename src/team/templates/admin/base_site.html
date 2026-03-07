@@ -1,0 +1,238 @@
+{% extends "admin/base.html" %}
+{% load i18n %}
+
+{% block title %}{% blocktranslate with site_name="AI Dev Team" %}{{ title }} | {{ site_name }}{% endblocktranslate %}{% endblock %}
+
+{% block branding %}
+<div id="site-name">
+  <a href="{% url 'admin:index' %}">AI Dev Team</a>
+</div>
+{% endblock %}
+
+{% block messages %}{% endblock %}
+
+{% block extrastyle %}
+{{ block.super }}
+<style>
+  /* ── Force light mode (overrides system dark mode preference) ── */
+  html { color-scheme: light !important; }
+
+  :root {
+    --primary:                 #6366f1;
+    --secondary:               #1e293b;
+    --accent:                  #fbbf24;
+    --primary-fg:              #fff;
+    --body-fg:                 #0f172a;
+    --body-bg:                 #f1f5f9;
+    --body-quiet-color:        #64748b;
+    --body-loud-color:         #0f172a;
+    --header-color:            #fff;
+    --header-branding-color:   #fff;
+    --header-bg:               #1e293b;
+    --header-link-color:       #94a3b8;
+    --breadcrumbs-fg:          #c7d2fe;
+    --breadcrumbs-link-fg:     #fff;
+    --breadcrumbs-bg:          #6366f1;
+    --link-fg:                 #4f46e5;
+    --link-hover-color:        #3730a3;
+    --link-selected-fg:        #818cf8;
+    --hairline-color:          #e2e8f0;
+    --border-color:            #cbd5e1;
+    --error-fg:                #dc2626;
+    --message-success-bg:      #dcfce7;
+    --message-warning-bg:      #fef9c3;
+    --message-error-bg:        #fee2e2;
+    --darkened-bg:             #f8fafc;
+    --selected-bg:             #eef2ff;
+    --selected-row:            #fef9c3;
+    --button-fg:               #fff;
+    --button-bg:               #6366f1;
+    --button-hover-bg:         #4f46e5;
+    --default-button-bg:       #1e293b;
+    --default-button-hover-bg: #334155;
+    --close-button-bg:         #64748b;
+    --close-button-hover-bg:   #475569;
+    --delete-button-bg:        #dc2626;
+    --delete-button-hover-bg:  #b91c1c;
+    --object-tools-fg:         #fff;
+    --object-tools-bg:         #6366f1;
+    --object-tools-hover-bg:   #4f46e5;
+  }
+
+  /* Re-apply light values inside dark-mode media query to override Django's dark defaults */
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: light;
+      --primary:                 #6366f1;
+      --secondary:               #1e293b;
+      --body-bg:                 #f1f5f9;
+      --body-fg:                 #0f172a;
+      --body-quiet-color:        #64748b;
+      --body-loud-color:         #0f172a;
+      --header-bg:               #1e293b;
+      --header-link-color:       #94a3b8;
+      --header-color:            #fff;
+      --breadcrumbs-bg:          #6366f1;
+      --breadcrumbs-link-fg:     #fff;
+      --breadcrumbs-fg:          #c7d2fe;
+      --link-fg:                 #4f46e5;
+      --link-hover-color:        #3730a3;
+      --link-selected-fg:        #818cf8;
+      --hairline-color:          #e2e8f0;
+      --border-color:            #cbd5e1;
+      --darkened-bg:             #f8fafc;
+      --selected-bg:             #eef2ff;
+      --selected-row:            #fef9c3;
+      --error-fg:                #dc2626;
+      --message-success-bg:      #dcfce7;
+      --message-warning-bg:      #fef9c3;
+      --message-error-bg:        #fee2e2;
+      --button-bg:               #6366f1;
+      --button-hover-bg:         #4f46e5;
+      --default-button-bg:       #1e293b;
+      --default-button-hover-bg: #334155;
+      --close-button-bg:         #64748b;
+      --close-button-hover-bg:   #475569;
+      --delete-button-bg:        #dc2626;
+      --delete-button-hover-bg:  #b91c1c;
+      --object-tools-bg:         #6366f1;
+      --object-tools-hover-bg:   #4f46e5;
+    }
+  }
+
+  /* ── Header ─────────────────────────────────────────────── */
+  #header {
+    background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+    box-shadow: 0 2px 12px rgba(0, 0, 0, .25);
+    padding: 10px 20px;
+  }
+
+  #branding h1 { margin: 0; padding: 0; font-size: 19px; }
+  #branding h1 a:link,
+  #branding h1 a:visited {
+    color: #fff;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    text-decoration: none;
+  }
+  #branding h1 a:hover { color: #c7d2fe; }
+
+  #user-tools { font-size: 12px; color: #64748b; }
+  #user-tools a:link,
+  #user-tools a:visited { color: #94a3b8; }
+  #user-tools a:hover   { color: #fff; }
+  #user-tools strong    { color: #e2e8f0; }
+
+  /* ── Breadcrumbs ─────────────────────────────────────────── */
+  .breadcrumbs {
+    padding: 10px 28px;
+    font-size: 13px;
+  }
+  .breadcrumbs a:link,
+  .breadcrumbs a:visited { color: #c7d2fe; }
+  .breadcrumbs a:hover   { color: #fff; }
+
+  /* ── Body ────────────────────────────────────────────────── */
+  #content { padding: 24px 28px; }
+
+  /* ── Module / section headers ────────────────────────────── */
+  .module caption,
+  .module > h2 {
+    background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%);
+    color: #fff;
+    font-size: 12.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    padding: 9px 14px;
+    border-radius: 6px 6px 0 0;
+  }
+
+  /* ── Index page app/model list ───────────────────────────── */
+  #content-main .module { box-shadow: 0 1px 4px rgba(0,0,0,.07); border-radius: 8px; overflow: hidden; }
+  #content-main .module table { border-radius: 0; }
+  #content-main .module table tbody tr:hover td { background: #eef2ff; }
+
+  /* ── Changelist table ────────────────────────────────────── */
+  #changelist-form .results {
+    border-radius: 8px;
+    overflow: hidden;
+    box-shadow: 0 1px 4px rgba(0,0,0,.08);
+  }
+  #changelist-form .results table thead th {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-bottom: none;
+    font-size: 11.5px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+  }
+  #changelist-form .results table thead th a:link,
+  #changelist-form .results table thead th a:visited { color: #cbd5e1; }
+  #changelist-form .results table thead th a:hover   { color: #fff; }
+  #changelist-form .results table tbody tr:hover td  { background: #eef2ff; }
+
+  /* ── Filters sidebar ──────────────────────────────────────── */
+  #changelist-filter { background: #f8fafc; border-left: 1px solid #e2e8f0; }
+  #changelist-filter h2 {
+    background: linear-gradient(90deg, #4f46e5 0%, #6366f1 100%);
+    color: #fff;
+    padding: 10px 15px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    border-radius: 0;
+  }
+  #changelist-filter h3 {
+    color: #1e293b;
+    font-size: 12px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+  }
+  #changelist-filter ul li.selected a { color: #4f46e5; font-weight: 600; }
+
+  /* ── Object tools ─────────────────────────────────────────── */
+  .object-tools a,
+  .object-tools button {
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 12.5px;
+    padding: 7px 14px;
+    transition: background 0.15s, box-shadow 0.15s, transform 0.1s;
+  }
+  .object-tools a:hover,
+  .object-tools button:hover {
+    box-shadow: 0 3px 10px rgba(99,102,241,.35);
+    transform: translateY(-1px);
+  }
+
+  /* ── Action / submit buttons ──────────────────────────────── */
+  .button, input[type=submit], input[type=button], .submit-row input, a.button {
+    border-radius: 6px;
+    font-weight: 600;
+    transition: background 0.15s;
+  }
+
+  /* ── Messages ─────────────────────────────────────────────── */
+  ul.messagelist li {
+    border-radius: 6px;
+    font-size: 13px;
+    border-left: 4px solid currentColor;
+  }
+
+  /* ── Search bar ───────────────────────────────────────────── */
+  #searchbar {
+    border-radius: 6px;
+    border: 1px solid #cbd5e1;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  #searchbar:focus {
+    outline: none;
+    border-color: #6366f1;
+    box-shadow: 0 0 0 3px rgba(99,102,241,.15);
+  }
+</style>
+{% endblock %}

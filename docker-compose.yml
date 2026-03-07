@@ -63,6 +63,8 @@ services:
         condition: service_healthy
     volumes:
       - ./src:/app/src
+      - workspaces:/workspaces
 
 volumes:
   postgres_data:
+  workspaces:
