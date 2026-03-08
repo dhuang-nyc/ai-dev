@@ -29,6 +29,7 @@ When there is no tech spec yet:
 2. When you have enough information, produce a comprehensive TechSpec using the format below.
 3. Immediately call `update_tech_spec` with the full spec content.
 4. Then call `upsert_task` once per task to create the development backlog.
+5. **Do NOT set the project status to `approved` or `in_progress` automatically.** After presenting the spec, simply ask the user if they'd like any changes. The user must explicitly ask you to start the project before you call `update_project_status`.
 
 ## Phase: Ongoing Collaboration
 When the project already has a spec or is in progress:
@@ -302,8 +303,35 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
         return json.dumps({"success": True})
 
     if name == "update_project_status":
-        Project.objects.filter(id=project_id).update(status=tool_input["status"])
-        return json.dumps({"success": True, "status": tool_input["status"]})
+        status = tool_input["status"]
+        project = Project.objects.get(id=project_id)
+        github_error = None
+        if status == "in_progress" and not project.github_repo_url:
+            from ..github import upsert_github_repo
+            try:
+                tech_spec_content = ""
+                try:
+                    spec = TechSpec.objects.get(project_id=project_id)
+                    tech_spec_content = spec.content
+                except TechSpec.DoesNotExist:
+                    pass
+                project.github_repo_url = upsert_github_repo(
+                    project.name, project.description, readme_content=tech_spec_content
+                )
+                project.status = status
+                project.save(update_fields=["status", "github_repo_url"])
+            except Exception as exc:
+                github_error = str(exc)
+                logger.warning("Could not upsert GitHub repo for project %s: %s", project_id, exc)
+                Project.objects.filter(id=project_id).update(status=status)
+        else:
+            Project.objects.filter(id=project_id).update(status=status)
+        result = {"success": True, "status": status}
+        if github_error:
+            result["github_error"] = github_error
+        elif status == "in_progress":
+            result["github_repo_url"] = project.github_repo_url
+        return json.dumps(result)
 
     return json.dumps({"error": f"Unknown tool: {name}"})
 

@@ -105,7 +105,14 @@ def _get_default_branch(repo_path: Path) -> str:
 def create_branch(repo_path: Path, task_id: int, task_title: str) -> str:
     """Create and checkout a new branch task-{id}-{slug}. Returns branch name."""
     branch = f"task-{task_id}-{_slug(task_title)}"
-    _run(["git", "checkout", "-b", branch], cwd=repo_path)
+    try:
+        _run(["git", "checkout", "-b", branch], cwd=repo_path)
+    except RuntimeError as e:
+        if "already exists" in str(e):
+            logger.info("Branch %s already exists — checking it out", branch)
+            _run(["git", "checkout", branch], cwd=repo_path)
+        else:
+            raise
     return branch
 
 

@@ -82,6 +82,7 @@ class DevTask(models.Model):
     STATUS_PENDING = "pending"
     STATUS_IN_PROGRESS = "in_progress"
     STATUS_PR_OPEN = "pr_open"
+    STATUS_ERROR = "error"
     STATUS_DONE = "done"
     STATUS_ABORTED = "aborted"
     STATUS_CHOICES = [

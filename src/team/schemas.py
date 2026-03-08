@@ -29,6 +29,16 @@ class DevTaskSchema(Schema):
     priority: int
     order: int
     blocked_by: list[int]
+    pr_url: Optional[str]
+    branch_name: str
+    agent_log: str
+    claude_prompt: str
+
+
+class UpdateTaskSchema(Schema):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    claude_prompt: Optional[str] = None
 
 
 class ApproveResponseSchema(Schema):
@@ -63,3 +73,49 @@ class ProjectStatusResponseSchema(Schema):
 
 class ProjectDeleteResponseSchema(Schema):
     deleted: bool
+
+
+class DashboardTaskSchema(Schema):
+    id: int
+    title: str
+    status: str
+    priority: int
+    project_id: int
+    project_name: str
+    pr_url: Optional[str]
+    has_logs: bool
+
+
+class WorkspaceSchema(Schema):
+    id: int
+    name: str
+    is_available: bool
+    current_task_id: Optional[int]
+    current_task_title: Optional[str]
+
+
+class TechSpecSchema(Schema):
+    content: str
+    version: int
+
+
+class ProjectListSchema(Schema):
+    id: int
+    name: str
+    description: str
+    status: str
+    github_repo_url: Optional[str]
+    created_at: datetime
+    has_tech_spec: bool
+    task_count: int
+
+
+class ProjectDetailSchema(Schema):
+    id: int
+    name: str
+    description: str
+    status: str
+    github_repo_url: Optional[str]
+    created_at: datetime
+    updated_at: datetime
+    tech_spec: Optional[TechSpecSchema]

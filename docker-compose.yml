@@ -65,6 +65,20 @@ services:
       - ./src:/app/src
       - workspaces:/workspaces
 
+  web:
+    image: node:20-alpine
+    working_dir: /app
+    command: sh -c "npm install && npm run dev"
+    ports:
+      - "5173:5173"
+    environment:
+      - API_URL=http://django:8000
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+    depends_on:
+      - django
+
 volumes:
   postgres_data:
   workspaces:

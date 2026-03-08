@@ -191,8 +191,8 @@ def project_manager_assign():
         )
         .exclude(
             blocked_by__status__in=[
-                DevTask.STATUS_PENDING,
-                DevTask.STATUS_IN_PROGRESS,
+                s for s, _ in DevTask.STATUS_CHOICES
+                if s not in (DevTask.STATUS_DONE, DevTask.STATUS_ABORTED)
             ]
         )
         .order_by("project", "order", "priority")
