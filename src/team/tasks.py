@@ -121,6 +121,14 @@ def run_dev_task(task_id: int):
         logger.info("[task-%d] %s", task_id, msg)
 
     try:
+        if task.depends_on.exclude(
+            status__in=[DevTask.STATUS_DONE, DevTask.STATUS_ABORTED]
+        ).exists():
+            _log(
+                "Task has dependencies that are not done — task will run on next trigger."
+            )
+            return
+
         # Claim an available workspace atomically
         with transaction.atomic():
             workspace = (
@@ -191,7 +199,8 @@ def project_manager_assign():
         )
         .exclude(
             blocked_by__status__in=[
-                s for s, _ in DevTask.STATUS_CHOICES
+                s
+                for s, _ in DevTask.STATUS_CHOICES
                 if s not in (DevTask.STATUS_DONE, DevTask.STATUS_ABORTED)
             ]
         )
