@@ -188,6 +188,100 @@ def run_claude_agent(
     )
 
 
+def run_claude_agent_for_feedback(
+    repo_path: Path,
+    branch: str,
+    pr_url: str,
+    comment_body: str,
+    commenter: str,
+    event_type: str = "comment",
+    comment_id: int | None = None,
+    repo_full_name: str = "",
+    pr_number: int | None = None,
+    on_output: callable = None,
+) -> None:
+    """
+    Checkout *branch* and run Claude Code to address reviewer feedback.
+
+    Claude will either:
+    - Answer a question by replying in the original review thread (review_comment)
+      or posting a PR comment (review / pr_comment)
+    - Apply a requested change, commit + push, then acknowledge in the same thread
+
+    Does NOT close or merge the PR.
+    """
+    # Sync and checkout the feature branch
+    _run(["git", "fetch", "origin"], cwd=repo_path)
+    try:
+        _run(["git", "checkout", branch], cwd=repo_path)
+        _run(["git", "reset", "--hard", f"origin/{branch}"], cwd=repo_path)
+    except RuntimeError:
+        _run(["git", "checkout", "-b", branch, f"origin/{branch}"], cwd=repo_path)
+
+    env = os.environ.copy()
+    if DEV_GITHUB_TOKEN:
+        env["GH_TOKEN"] = DEV_GITHUB_TOKEN
+
+    # Build the reply command depending on whether we have a thread to reply into.
+    # pull_request_review_comment → reply directly in the diff thread via the replies API.
+    # pull_request_review / issue_comment → post a top-level PR comment.
+    if event_type == "review_comment" and comment_id and repo_full_name and pr_number:
+        reply_cmd = (
+            f"gh api -X POST repos/{repo_full_name}/pulls/{pr_number}/comments/{comment_id}/replies "
+            f"-f body='YOUR_REPLY_HERE'"
+        )
+        reply_note = "Reply **in the review thread** using the command above (replace YOUR_REPLY_HERE with your message)."
+    else:
+        reply_cmd = f"gh pr comment {pr_url} --body 'YOUR_REPLY_HERE'"
+        reply_note = "Post a PR comment using the command above (replace YOUR_REPLY_HERE with your message)."
+
+    prompt = (
+        f"A reviewer has left feedback on a pull request you own. Address it appropriately.\n\n"
+        f"PR URL: {pr_url}\n"
+        f"Branch: {branch}\n"
+        f"Reviewer: @{commenter}\n"
+        f"Feedback type: {event_type}\n\n"
+        f"## Reviewer's Comment\n{comment_body}\n\n"
+        f"## Instructions\n"
+        f"1. Read the relevant code files to understand the context.\n"
+        f"2. To reply, use this exact command (substituting your message):\n"
+        f"   `{reply_cmd}`\n"
+        f"   {reply_note}\n"
+        f"3. If the comment is a **question**: reply with your explanation using the command above.\n"
+        f"4. If the comment is a **change request**: implement the change, then:\n"
+        f"   - Stage and commit: `git add -A && git commit -m 'address review feedback from @{commenter}'`\n"
+        f"   - Push: `git push origin {branch}`\n"
+        f"   - Acknowledge using the reply command above.\n"
+        f"5. Always post at least one reply to acknowledge the feedback.\n"
+        f"6. Do NOT close, merge, or delete the PR or branch."
+    )
+
+    proc = subprocess.Popen(
+        [
+            "claude",
+            "--print",
+            prompt,
+            "--allowedTools",
+            "Edit,Write,Read,Bash,Glob,Grep",
+        ],
+        cwd=str(repo_path),
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        env=env,
+    )
+
+    for raw in proc.stdout:
+        line = raw.rstrip("\n")
+        logger.info("[claude-feedback] %s", line)
+        if on_output:
+            on_output(line)
+
+    proc.wait(timeout=1800)
+    if proc.returncode != 0:
+        raise RuntimeError(f"claude exited with rc={proc.returncode}")
+
+
 def cleanup_merged_branch(repo_path: Path, branch: str) -> None:
     """
     After a PR is merged: switch to main, pull latest, delete the local branch.

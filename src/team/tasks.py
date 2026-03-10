@@ -1,10 +1,15 @@
 import logging
+from datetime import datetime, timezone
 
 from celery import shared_task
 
 from team.agents.team_lead import extract_tasks
 
 logger = logging.getLogger(__name__)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=5)
@@ -114,7 +119,7 @@ def run_dev_task(task_id: int):
     workspace = None
 
     def _log(msg: str):
-        task.agent_log += msg + "\n"
+        task.agent_log += f"[{_now()}] {msg}\n"
         task.save(update_fields=["agent_log"])
         logger.info("[task-%d] %s", task_id, msg)
 
@@ -160,7 +165,7 @@ def run_dev_task(task_id: int):
         _log("Running claude agent")
 
         def _stream(line: str):
-            task.agent_log += line + "\n"
+            task.agent_log += f"[{_now()}] {line}\n"
             task.save(update_fields=["agent_log"])
             logger.info("[task-%d] %s", task_id, line)
 
@@ -180,7 +185,7 @@ def run_dev_task(task_id: int):
 
     except Exception as exc:
         logger.exception("run_dev_task failed for task %s", task_id)
-        task.agent_log += f"\nFAILED: {exc}\n"
+        task.agent_log += f"[{_now()}] FAILED: {exc}\n"
         task.status = DevTask.STATUS_PENDING
         task.save(update_fields=["agent_log", "status"])
 
@@ -236,6 +241,104 @@ def cleanup_workspace_branch(task_id: int):
                     task.branch_name,
                     ws_dir.name,
                 )
+
+
+@shared_task
+def answer_pr_question(
+    task_id: int,
+    comment_body: str,
+    commenter: str,
+    comment_url: str = "",
+    event_type: str = "comment",
+    comment_id: int | None = None,
+    repo_full_name: str = "",
+    pr_number: int | None = None,
+):
+    """
+    Handle PR feedback from a non-dev-agent reviewer.
+
+    Atomically claims an available workspace, checks out the task branch, then
+    invokes Claude Code to answer the question or apply the requested change and
+    push a commit back to the branch.  The full Claude stream is saved to the
+    task's agent_log with timestamps.
+    """
+    from django.db import transaction
+
+    from .agents.dev_agent import (
+        extract_repo_info,
+        run_claude_agent_for_feedback,
+        setup_workspace,
+    )
+    from .models import DevTask, Workspace
+
+    task = DevTask.objects.select_related("project").get(id=task_id)
+    workspace = None
+
+    def _log(msg: str):
+        task.agent_log += f"[{_now()}] {msg}\n"
+        task.save(update_fields=["agent_log"])
+        logger.info("[task-%d] %s", task_id, msg)
+
+    _log(f"[webhook] PR feedback received — @{commenter} ({event_type})")
+    _log(f"[webhook] Comment: {comment_body[:500]}")
+    if comment_url:
+        _log(f"[webhook] URL: {comment_url}")
+
+    try:
+        if not task.branch_name:
+            _log("ERROR: task has no branch_name — cannot process feedback")
+            return
+
+        repo_url = task.project.github_repo_url
+        if not repo_url:
+            _log("ERROR: project has no github_repo_url")
+            return
+
+        with transaction.atomic():
+            workspace = (
+                Workspace.objects.select_for_update(skip_locked=True)
+                .filter(current_task=None)
+                .first()
+            )
+            if not workspace:
+                _log("No available workspace — feedback not processed (retry by reposting the comment)")
+                return
+            workspace.claim(task)
+
+        _log(f"Claimed workspace: {workspace.name}")
+
+        _, repo_name = extract_repo_info(repo_url)
+        repo_path = setup_workspace(workspace.name, repo_url, repo_name)
+
+        _log("Running Claude Code to address feedback…")
+
+        def _stream(line: str):
+            task.agent_log += f"[{_now()}] {line}\n"
+            task.save(update_fields=["agent_log"])
+            logger.info("[task-%d] %s", task_id, line)
+
+        run_claude_agent_for_feedback(
+            repo_path=repo_path,
+            branch=task.branch_name,
+            pr_url=task.pr_url or "",
+            comment_body=comment_body,
+            commenter=commenter,
+            event_type=event_type,
+            comment_id=comment_id,
+            repo_full_name=repo_full_name,
+            pr_number=pr_number,
+            on_output=_stream,
+        )
+
+        _log("Feedback handling complete.")
+
+    except Exception as exc:
+        logger.exception("answer_pr_question failed for task %s", task_id)
+        _log(f"ERROR: {exc}")
+
+    finally:
+        if workspace is not None:
+            workspace.release()
 
 
 @shared_task

@@ -472,7 +472,7 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
 def github_webhook(request):
     import json as _json
     from django.http import HttpResponse
-    from .github import verify_webhook_signature
+    from .github import is_dev_agent, parse_pr_comment_event, verify_webhook_signature
 
     event = request.headers.get("X-GitHub-Event", "")
     signature = request.headers.get("X-Hub-Signature-256", "")
@@ -480,10 +480,20 @@ def github_webhook(request):
     if not verify_webhook_signature(request.body, signature):
         return HttpResponse("Invalid signature", status=401)
 
-    if event != "pull_request":
-        return {"ok": True}
-
     payload = _json.loads(request.body)
+
+    if event == "pull_request":
+        return _handle_pr_merged(payload)
+
+    comment_info = parse_pr_comment_event(event, payload)
+    if comment_info and not is_dev_agent(comment_info["commenter"]):
+        return _handle_pr_feedback(comment_info)
+
+    return {"ok": True}
+
+
+def _handle_pr_merged(payload: dict):
+    """Mark a DevTask done when its PR is merged."""
     action = payload.get("action")
     pr = payload.get("pull_request", {})
 
@@ -505,5 +515,43 @@ def github_webhook(request):
 
     cleanup_workspace_branch.delay(task.id)
     project_manager_assign.delay()
+
+    return {"ok": True}
+
+
+def _handle_pr_feedback(comment_info: dict):
+    """Enqueue answer_pr_question when a non-dev-agent comments on an open PR."""
+    pr_url = comment_info["pr_url"]
+    commenter = comment_info["commenter"]
+
+    if not pr_url:
+        return {"ok": True}
+
+    try:
+        task = DevTask.objects.get(pr_url=pr_url, status=DevTask.STATUS_PR_OPEN)
+    except DevTask.DoesNotExist:
+        logger.info(
+            "Webhook: no open task for PR %s (commenter: @%s) — ignoring",
+            pr_url, commenter,
+        )
+        return {"ok": True}
+
+    from .tasks import answer_pr_question
+
+    answer_pr_question.delay(
+        task.id,
+        comment_info["body"],
+        commenter,
+        comment_url=comment_info.get("comment_url", ""),
+        event_type=comment_info.get("event_type", "comment"),
+        comment_id=comment_info.get("comment_id"),
+        repo_full_name=comment_info.get("repo_full_name", ""),
+        pr_number=comment_info.get("pr_number"),
+    )
+
+    logger.info(
+        "Enqueued answer_pr_question for task %s (@%s, %s)",
+        task.id, commenter, comment_info.get("event_type"),
+    )
 
     return {"ok": True}

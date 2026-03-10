@@ -23,11 +23,20 @@ _HEADERS = {
     "X-GitHub-Api-Version": "2022-11-28",
 }
 
+# Events we subscribe to on each repo webhook
+_WEBHOOK_EVENTS = [
+    "pull_request",
+    "pull_request_review",
+    "pull_request_review_comment",
+    "issue_comment",
+]
+
 
 def verify_webhook_signature(payload_bytes: bytes, signature_header: str) -> bool:
     """Return True if the request signature matches GITHUB_WEBHOOK_SECRET."""
-    secret = os.environ.get("GITHUB_WEBHOOK_SECRET", "")
+    secret = os.environ.get("GITHUB_WEBHOOK_SECRET", "").strip()
     if not secret:
+        logger.warning("GITHUB_WEBHOOK_SECRET is not set — rejecting webhook")
         return False
     expected = "sha256=" + hmac.new(
         secret.encode(), payload_bytes, hashlib.sha256
@@ -35,8 +44,100 @@ def verify_webhook_signature(payload_bytes: bytes, signature_header: str) -> boo
     return hmac.compare_digest(expected, signature_header or "")
 
 
+def is_dev_agent(username: str) -> bool:
+    """Return True if *username* is the configured dev-agent bot account."""
+    dev_bot = os.environ.get("DEV_GITHUB_USERNAME", "").strip()
+    return bool(dev_bot and username == dev_bot)
+
+
+def parse_pr_comment_event(event: str, payload: dict) -> dict | None:
+    """
+    Normalise pull_request_review_comment, pull_request_review, and issue_comment events.
+
+    Returns a dict with keys:
+        pr_url, pr_number, repo_full_name, commenter, body, comment_url, event_type
+        For review_comment events also includes: comment_id (int)
+    or None if this payload should be ignored (wrong action, empty body, not a PR, etc.).
+    """
+    action = payload.get("action", "")
+
+    if event == "pull_request_review_comment":
+        if action != "created":
+            return None
+        comment = payload.get("comment", {})
+        pr = payload.get("pull_request", {})
+        repo = payload.get("repository", {})
+        return {
+            "pr_url": pr.get("html_url", ""),
+            "pr_number": pr.get("number"),
+            "repo_full_name": repo.get("full_name", ""),
+            "commenter": comment.get("user", {}).get("login", ""),
+            "body": comment.get("body", ""),
+            "comment_url": comment.get("html_url", ""),
+            "comment_id": comment.get("id"),   # used to reply in the review thread
+            "event_type": "review_comment",
+        }
+
+    if event == "pull_request_review":
+        if action != "submitted":
+            return None
+        review = payload.get("review", {})
+        body = (review.get("body") or "").strip()
+        if not body:
+            return None  # approve/request-changes with no textual comment
+        pr = payload.get("pull_request", {})
+        repo = payload.get("repository", {})
+        return {
+            "pr_url": pr.get("html_url", ""),
+            "pr_number": pr.get("number"),
+            "repo_full_name": repo.get("full_name", ""),
+            "commenter": review.get("user", {}).get("login", ""),
+            "body": body,
+            "comment_url": review.get("html_url", ""),
+            "event_type": "review",
+        }
+
+    if event == "issue_comment":
+        if action != "created":
+            return None
+        issue = payload.get("issue", {})
+        if "pull_request" not in issue:
+            return None  # plain issue comment, not a PR
+        comment = payload.get("comment", {})
+        repo = payload.get("repository", {})
+        pr_url = issue.get("pull_request", {}).get("html_url", "")
+        return {
+            "pr_url": pr_url,
+            "pr_number": issue.get("number"),
+            "repo_full_name": repo.get("full_name", ""),
+            "commenter": comment.get("user", {}).get("login", ""),
+            "body": comment.get("body", ""),
+            "comment_url": comment.get("html_url", ""),
+            "event_type": "pr_comment",
+        }
+
+    return None
+
+
+def post_pr_comment(repo_full_name: str, pr_number: int, body: str) -> None:
+    """Post a comment on a pull request via the GitHub REST API."""
+    token = os.environ.get("DEV_GITHUB_TOKEN") or os.environ.get("GITHUB_TOKEN")
+    if not token:
+        logger.warning("Cannot post PR comment: no GitHub token configured")
+        return
+    headers = {**_HEADERS, "Authorization": f"Bearer {token}"}
+    resp = httpx.post(
+        f"{_GITHUB_API}/repos/{repo_full_name}/issues/{pr_number}/comments",
+        json={"body": body},
+        headers=headers,
+        timeout=15,
+    )
+    resp.raise_for_status()
+    logger.info("Posted comment on PR #%d in %s", pr_number, repo_full_name)
+
+
 def register_webhook(full_name: str, headers: dict) -> None:
-    """Register a pull_request webhook on *full_name* if configured."""
+    """Register the project webhook on *full_name* if configured."""
     secret = os.environ.get("GITHUB_WEBHOOK_SECRET", "").strip()
     base_url = os.environ.get("APP_BASE_URL", "").strip().rstrip("/")
     if not secret or not base_url:
@@ -49,7 +150,7 @@ def register_webhook(full_name: str, headers: dict) -> None:
         json={
             "name": "web",
             "active": True,
-            "events": ["pull_request"],
+            "events": _WEBHOOK_EVENTS,
             "config": {
                 "url": webhook_url,
                 "content_type": "json",
