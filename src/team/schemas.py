@@ -39,6 +39,7 @@ class UpdateTaskSchema(Schema):
     title: Optional[str] = None
     description: Optional[str] = None
     claude_prompt: Optional[str] = None
+    status: Optional[str] = None
 
 
 class ApproveResponseSchema(Schema):

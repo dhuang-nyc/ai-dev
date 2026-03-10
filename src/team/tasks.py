@@ -103,11 +103,9 @@ def run_dev_task(task_id: int):
     from django.db import transaction
 
     from .agents.dev_agent import (
-        create_branch,
+        branch_name,
         extract_repo_info,
-        open_pull_request,
-        push_branch,
-        run_claude_code,
+        run_claude_agent,
         setup_workspace,
     )
     from .models import DevTask, Workspace
@@ -121,7 +119,7 @@ def run_dev_task(task_id: int):
         logger.info("[task-%d] %s", task_id, msg)
 
     try:
-        if task.depends_on.exclude(
+        if task.blocked_by.exclude(
             status__in=[DevTask.STATUS_DONE, DevTask.STATUS_ABORTED]
         ).exists():
             _log(
@@ -149,27 +147,30 @@ def run_dev_task(task_id: int):
                 f"Project {task.project_id} has no github_repo_url"
             )
 
-        repo_full_name, repo_name = extract_repo_info(repo_url)
+        _, repo_name = extract_repo_info(repo_url)
+        branch = branch_name(task_id, task.title)
 
-        _log("Setting up workspace")
-        repo_path = setup_workspace(workspace.name, repo_url, repo_name)
-
-        _log("Creating branch")
-        branch = create_branch(repo_path, task_id, task.title)
         task.branch_name = branch
         task.status = DevTask.STATUS_IN_PROGRESS
         task.save(update_fields=["branch_name", "status"])
 
-        _log("Running claude --print")
-        claude_output = run_claude_code(repo_path, task.claude_prompt)
-        _log(claude_output[:4000])
+        _log("Setting up workspace")
+        repo_path = setup_workspace(workspace.name, repo_url, repo_name)
 
-        _log("Pushing branch")
-        push_branch(repo_path, branch)
+        _log("Running claude agent")
 
-        _log("Opening pull request")
-        pr_url = open_pull_request(
-            repo_full_name, branch, task.title, task.description, task_id
+        def _stream(line: str):
+            task.agent_log += line + "\n"
+            task.save(update_fields=["agent_log"])
+            logger.info("[task-%d] %s", task_id, line)
+
+        pr_url = run_claude_agent(
+            repo_path,
+            branch,
+            task.title,
+            task.description,
+            task.claude_prompt,
+            on_output=_stream,
         )
 
         task.pr_url = pr_url
@@ -186,6 +187,55 @@ def run_dev_task(task_id: int):
     finally:
         if workspace is not None:
             workspace.release()
+
+
+@shared_task
+def cleanup_workspace_branch(task_id: int):
+    """
+    After a PR is merged, find every workspace that has this task's repo cloned
+    and clean up the local branch: switch to main, pull latest, delete branch.
+    """
+    from pathlib import Path
+
+    from .agents.dev_agent import (
+        WORKSPACES_BASE,
+        cleanup_merged_branch,
+        extract_repo_info,
+    )
+    from .models import DevTask
+
+    try:
+        task = DevTask.objects.select_related("project").get(id=task_id)
+    except DevTask.DoesNotExist:
+        return
+
+    if not task.branch_name or not task.project.github_repo_url:
+        return
+
+    _, repo_name = extract_repo_info(task.project.github_repo_url)
+    workspaces_root = Path(WORKSPACES_BASE)
+
+    if not workspaces_root.exists():
+        return
+
+    for ws_dir in workspaces_root.iterdir():
+        if not ws_dir.is_dir():
+            continue
+        repo_path = ws_dir / repo_name
+        if (repo_path / ".git").exists():
+            try:
+                cleanup_merged_branch(repo_path, task.branch_name)
+                logger.info(
+                    "Cleaned up branch %s in workspace %s",
+                    task.branch_name,
+                    ws_dir.name,
+                )
+            except Exception:
+                logger.exception(
+                    "Failed to cleanup branch %s in workspace %s",
+                    task.branch_name,
+                    ws_dir.name,
+                )
 
 
 @shared_task

@@ -30,17 +30,32 @@ api = NinjaAPI()
 
 @api.get("/tasks/", response=list[DashboardTaskSchema])
 def list_active_tasks(request):
+    STATUS_ORDER = {
+        DevTask.STATUS_PR_OPEN: 0,
+        DevTask.STATUS_IN_PROGRESS: 1,
+        DevTask.STATUS_ERROR: 2,
+        DevTask.STATUS_PENDING: 3,
+        DevTask.STATUS_DONE: 4,
+    }
+    from django.db.models import Case, IntegerField, Value, When
+
     tasks = (
         DevTask.objects.filter(
-            status__in=[
-                DevTask.STATUS_PENDING,
-                DevTask.STATUS_IN_PROGRESS,
-                DevTask.STATUS_PR_OPEN,
-            ],
+            status__in=STATUS_ORDER.keys(),
             project__status=Project.STATUS_IN_PROGRESS,
         )
         .select_related("project")
-        .order_by("status", "project", "order", "priority")
+        .annotate(
+            status_order=Case(
+                *[
+                    When(status=s, then=Value(i))
+                    for s, i in STATUS_ORDER.items()
+                ],
+                default=Value(99),
+                output_field=IntegerField(),
+            )
+        )
+        .order_by("status_order", "project", "order", "priority")
     )
     return [
         DashboardTaskSchema(
@@ -328,7 +343,8 @@ def run_dev_agents(request):
         )
         .exclude(
             blocked_by__status__in=[
-                s for s, _ in DevTask.STATUS_CHOICES
+                s
+                for s, _ in DevTask.STATUS_CHOICES
                 if s not in (DevTask.STATUS_DONE, DevTask.STATUS_ABORTED)
             ]
         )
@@ -410,14 +426,31 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
         t = DevTask.objects.prefetch_related("blocked_by").get(id=task_id)
     except DevTask.DoesNotExist:
         raise HttpError(404, "Task not found")
-    if t.status != DevTask.STATUS_PENDING:
-        raise HttpError(400, f"Cannot edit task with status '{t.status}'.")
     update_fields = []
+    editable = t.status == DevTask.STATUS_PENDING
     for field in ("title", "description", "claude_prompt"):
         val = getattr(payload, field)
         if val is not None:
+            if not editable:
+                raise HttpError(
+                    400, f"Cannot edit task fields when status is '{t.status}'."
+                )
             setattr(t, field, val)
             update_fields.append(field)
+    if payload.status is not None and payload.status != t.status:
+        valid = {s for s, _ in DevTask.STATUS_CHOICES}
+        if payload.status not in valid:
+            raise HttpError(400, f"Invalid status '{payload.status}'.")
+        t.status = payload.status
+        update_fields.append("status")
+        if (
+            payload.status == DevTask.STATUS_DONE
+            or payload.status == DevTask.STATUS_ABORTED
+        ):
+            from .tasks import cleanup_workspace_branch
+
+            cleanup_workspace_branch.delay(t.id)
+
     if update_fields:
         t.save(update_fields=update_fields)
     return DevTaskSchema(
@@ -468,7 +501,9 @@ def github_webhook(request):
     task.save(update_fields=["status"])
     logger.info("Task %s marked done via webhook (PR %s)", task.id, pr_url)
 
-    from .tasks import project_manager_assign
+    from .tasks import cleanup_workspace_branch, project_manager_assign
+
+    cleanup_workspace_branch.delay(task.id)
     project_manager_assign.delay()
 
     return {"ok": True}

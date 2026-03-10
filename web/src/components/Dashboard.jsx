@@ -74,7 +74,7 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
   ];
 
   return (
-    <div className="max-w-4xl mx-auto px-6 py-8 animate-fadein space-y-8">
+    <div className="w-full animate-fadein px-12 py-24 flex flex-col gap-8">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>

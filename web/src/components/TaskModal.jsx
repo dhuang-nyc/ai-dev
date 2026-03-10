@@ -1,8 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { api } from "../api";
 import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from "../utils";
-
-const EDITABLE_STATUSES = new Set(["pending"]);
 
 export default function TaskModal({ taskId, onClose, onSaved }) {
   const [task, setTask]       = useState(null);
@@ -14,6 +13,7 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
   const [title, setTitle]           = useState("");
   const [description, setDescription] = useState("");
   const [prompt, setPrompt]         = useState("");
+  const [status, setStatus]         = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
@@ -23,6 +23,7 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
         setTitle(t.title);
         setDescription(t.description);
         setPrompt(t.claude_prompt);
+        setStatus(t.status);
         setLoading(false);
       })
       .catch(() => setLoading(false));
@@ -37,7 +38,7 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const editable = task && EDITABLE_STATUSES.has(task.status);
+  const editable = task && task.status === "pending";
 
   function handleChange(setter) {
     return (e) => { setter(e.target.value); setDirty(true); };
@@ -47,11 +48,13 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
     setSaving(true);
     setError(null);
     try {
-      const updated = await api.updateTask(taskId, {
-        title,
-        description,
-        claude_prompt: prompt,
-      });
+      const payload = { status };
+      if (editable) {
+        payload.title = title;
+        payload.description = description;
+        payload.claude_prompt = prompt;
+      }
+      const updated = await api.updateTask(taskId, payload);
       setTask(updated);
       setDirty(false);
       onSaved?.(updated);
@@ -62,7 +65,7 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
     }
   }
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm animate-fadein"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
@@ -72,13 +75,17 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             {task && (
-              <span
-                className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
-                  TASK_STATUS_COLORS[task.status] ?? "bg-slate-100 text-slate-600"
+              <select
+                value={status}
+                onChange={(e) => { setStatus(e.target.value); setDirty(true); }}
+                className={`text-xs font-semibold px-2.5 py-1 rounded-full border-0 cursor-pointer shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
+                  TASK_STATUS_COLORS[status] ?? "bg-slate-100 text-slate-600"
                 }`}
               >
-                {TASK_STATUS_LABELS[task.status] ?? task.status}
-              </span>
+                {Object.entries(TASK_STATUS_LABELS).map(([val, label]) => (
+                  <option key={val} value={val}>{label}</option>
+                ))}
+              </select>
             )}
             {task?.branch_name && (
               <span className="text-xs text-slate-400 font-mono truncate">{task.branch_name}</span>
@@ -196,7 +203,7 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 shrink-0">
             <div className="text-xs text-slate-400">
               {!editable && (
-                <span>Read-only — task is <strong>{TASK_STATUS_LABELS[task.status] ?? task.status}</strong></span>
+                <span className="italic">Fields locked — status only is editable</span>
               )}
               {error && <span className="text-red-500">{error}</span>}
             </div>
@@ -207,19 +214,18 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
               >
                 Close
               </button>
-              {editable && (
-                <button
-                  onClick={handleSave}
-                  disabled={saving || !dirty}
-                  className="px-4 py-1.5 text-sm font-semibold bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {saving ? "Saving…" : "Save"}
-                </button>
-              )}
+              <button
+                onClick={handleSave}
+                disabled={saving || !dirty}
+                className="px-4 py-1.5 text-sm font-semibold bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              >
+                {saving ? "Saving…" : "Save"}
+              </button>
             </div>
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
