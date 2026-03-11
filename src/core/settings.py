@@ -7,6 +7,15 @@ SECRET_KEY = os.environ.get("SECRET_KEY")
 DEBUG = os.environ.get("DEBUG", "True") == "True"
 ALLOWED_HOSTS = ["*"]
 
+# CORS origins
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+    "https://elvis-unpaying-monroe.ngrok-free.dev",
+]
+
+CSRF_TRUSTED_ORIGINS = CORS_ALLOWED_ORIGINS
+
 INSTALLED_APPS = [
     "team",  # must precede django.contrib.admin for template overrides to work
     "django.contrib.admin",

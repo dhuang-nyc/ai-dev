@@ -391,6 +391,106 @@
     color: #94a3b8;
     font-size: 13px;
   }
+
+  /* ── Agent log button ────────────────────────────────────── */
+  .btn-log {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 16px;
+    padding: 2px 4px;
+    border-radius: 4px;
+    line-height: 1;
+    opacity: 0.75;
+    transition: opacity 0.12s, background 0.12s;
+  }
+  .btn-log:hover { opacity: 1; background: #f1f5f9; }
+
+  /* ── Agent log modal ─────────────────────────────────────── */
+  #log-modal-overlay {
+    display: none;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, .65);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    z-index: 9999;
+    align-items: center;
+    justify-content: center;
+  }
+  #log-modal-box {
+    background: #0f172a;
+    border: 1px solid #1e293b;
+    border-radius: 10px;
+    width: 760px;
+    max-width: 95vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 0 24px 64px rgba(0,0,0,.6);
+    animation: modal-in 0.18s ease;
+  }
+  #log-modal-header {
+    padding: 13px 18px;
+    border-bottom: 1px solid #1e293b;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  #log-modal-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e2e8f0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  #log-modal-title span { color: #64748b; font-weight: 400; }
+  #log-modal-close {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    color: #475569;
+    padding: 3px 7px;
+    border-radius: 4px;
+    transition: background 0.12s, color 0.12s;
+  }
+  #log-modal-close:hover { background: #1e293b; color: #94a3b8; }
+  #log-modal-body {
+    overflow-y: auto;
+    padding: 16px 18px;
+    flex: 1;
+  }
+  #log-modal-body::-webkit-scrollbar        { width: 5px; }
+  #log-modal-body::-webkit-scrollbar-track  { background: transparent; }
+  #log-modal-body::-webkit-scrollbar-thumb  { background: #334155; border-radius: 3px; }
+  #log-modal-content {
+    font-family: "SF Mono", "Menlo", "Monaco", "Consolas", monospace;
+    font-size: 12px;
+    line-height: 1.7;
+    color: #94a3b8;
+    white-space: pre-wrap;
+    word-break: break-word;
+    margin: 0;
+  }
+  #log-modal-content .log-ts  { color: #475569; }
+  #log-modal-content .log-err { color: #f87171; }
+  #log-modal-content .log-ok  { color: #34d399; }
+  #log-modal-empty {
+    color: #475569;
+    font-size: 13px;
+    text-align: center;
+    padding: 30px 0;
+  }
+  #log-modal-loading {
+    color: #475569;
+    font-size: 13px;
+    text-align: center;
+    padding: 30px 0;
+  }
 </style>
 
 <div class="chat-container">
@@ -490,6 +590,7 @@
             <th>Status</th>
             <th>Priority</th>
             <th>Blocked By</th>
+            <th style="width:40px;text-align:center;">Log</th>
           </tr>
         </thead>
         <tbody>
@@ -504,6 +605,15 @@
               {% for blocker in task.blocked_by.all %}
                 <span class="blocker-tag">{{ blocker.title }}</span>
               {% empty %}<span style="color:#cbd5e1;">&#8212;</span>{% endfor %}
+            </td>
+            <td style="text-align:center;">
+              {% if task.agent_log %}
+                <button class="btn-log" title="View agent log"
+                        data-task-id="{{ task.id }}"
+                        data-task-title="{{ task.title|escapejs }}">💬</button>
+              {% else %}
+                <span style="color:#e2e8f0;">&#8212;</span>
+              {% endif %}
             </td>
           </tr>
           {% endfor %}
@@ -521,6 +631,21 @@
   </div>
   {% endif %}
 
+</div>
+
+<!-- Agent Log Modal -->
+<div id="log-modal-overlay">
+  <div id="log-modal-box">
+    <div id="log-modal-header">
+      <div id="log-modal-title">💬 Agent Log <span id="log-modal-task-name"></span></div>
+      <button id="log-modal-close" type="button">&times;</button>
+    </div>
+    <div id="log-modal-body">
+      <div id="log-modal-loading">Loading&hellip;</div>
+      <pre id="log-modal-content" style="display:none;"></pre>
+      <div id="log-modal-empty" style="display:none;">No log entries yet.</div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -785,6 +910,63 @@
   }
 
   scrollToBottom();
+})();
+
+// ── Agent Log Modal ───────────────────────────────────────────
+(function () {
+  const overlay  = document.getElementById('log-modal-overlay');
+  const taskName = document.getElementById('log-modal-task-name');
+  const loading  = document.getElementById('log-modal-loading');
+  const content  = document.getElementById('log-modal-content');
+  const empty    = document.getElementById('log-modal-empty');
+
+  function colorize(raw) {
+    return raw.replace(/(\[\d{4}-\d{2}-\d{2}[^\]]*\])/g, '<span class="log-ts">$1</span>')
+              .replace(/(error|exception|failed|failure)/gi, '<span class="log-err">$1</span>')
+              .replace(/(success|done|completed|✓)/gi, '<span class="log-ok">$1</span>');
+  }
+
+  function openModal(taskId, title) {
+    taskName.textContent = title ? `— ${title}` : '';
+    loading.style.display = 'block';
+    content.style.display = 'none';
+    empty.style.display   = 'none';
+    overlay.style.display = 'flex';
+
+    fetch(`/api/tasks/${taskId}/`)
+      .then(r => r.ok ? r.json() : Promise.reject(r.status))
+      .then(data => {
+        loading.style.display = 'none';
+        const log = (data.agent_log || '').trim();
+        if (log) {
+          content.innerHTML = colorize(log);
+          content.style.display = 'block';
+          // scroll to bottom of log
+          const body = document.getElementById('log-modal-body');
+          body.scrollTop = body.scrollHeight;
+        } else {
+          empty.style.display = 'block';
+        }
+      })
+      .catch(() => {
+        loading.style.display = 'none';
+        empty.textContent = 'Failed to load log.';
+        empty.style.display = 'block';
+      });
+  }
+
+  function closeModal() {
+    overlay.style.display = 'none';
+  }
+
+  document.getElementById('log-modal-close').addEventListener('click', closeModal);
+  overlay.addEventListener('click', e => { if (e.target === overlay) closeModal(); });
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && overlay.style.display === 'flex') closeModal(); });
+
+  document.addEventListener('click', function (e) {
+    const btn = e.target.closest('.btn-log');
+    if (btn) openModal(btn.dataset.taskId, btn.dataset.taskTitle);
+  });
 })();
 </script>
 {% endblock %}

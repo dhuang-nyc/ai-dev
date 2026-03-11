@@ -4,12 +4,19 @@ from datetime import datetime, timezone
 from celery import shared_task
 
 from team.agents.team_lead import extract_tasks
+from team.models import DevTask
 
 logger = logging.getLogger(__name__)
 
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _log(task: DevTask, msg: str):
+    task.agent_log += f"[{_now()}] {msg}\n"
+    task.save(update_fields=["agent_log"])
+    logger.info("[task-%d] %s", task.id, msg)
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=5)
@@ -118,17 +125,13 @@ def run_dev_task(task_id: int):
     task = DevTask.objects.get(id=task_id)
     workspace = None
 
-    def _log(msg: str):
-        task.agent_log += f"[{_now()}] {msg}\n"
-        task.save(update_fields=["agent_log"])
-        logger.info("[task-%d] %s", task_id, msg)
-
     try:
         if task.blocked_by.exclude(
             status__in=[DevTask.STATUS_DONE, DevTask.STATUS_ABORTED]
         ).exists():
             _log(
-                "Task has dependencies that are not done — task will run on next trigger."
+                task,
+                "Task has dependencies that are not done — task will run on next trigger.",
             )
             return
 
@@ -140,11 +143,14 @@ def run_dev_task(task_id: int):
                 .first()
             )
             if not workspace:
-                _log("No available workspace — task will run on next trigger.")
+                _log(
+                    task,
+                    "No available workspace — task will run on next trigger.",
+                )
                 return
             workspace.claim(task)
 
-        _log(f"Claimed workspace: {workspace.name}")
+        _log(task, f"Claimed workspace: {workspace.name}")
 
         repo_url = task.project.github_repo_url
         if not repo_url:
@@ -159,10 +165,10 @@ def run_dev_task(task_id: int):
         task.status = DevTask.STATUS_IN_PROGRESS
         task.save(update_fields=["branch_name", "status"])
 
-        _log("Setting up workspace")
+        _log(task, "Setting up workspace")
         repo_path = setup_workspace(workspace.name, repo_url, repo_name)
 
-        _log("Running claude agent")
+        _log(task, "Running claude agent")
 
         def _stream(line: str):
             task.agent_log += f"[{_now()}] {line}\n"
@@ -181,13 +187,13 @@ def run_dev_task(task_id: int):
         task.pr_url = pr_url
         task.status = DevTask.STATUS_PR_OPEN
         task.save(update_fields=["pr_url", "status"])
-        _log(f"PR opened: {pr_url}")
+        _log(task, f"PR opened: {pr_url}")
 
     except Exception as exc:
         logger.exception("run_dev_task failed for task %s", task_id)
-        task.agent_log += f"[{_now()}] FAILED: {exc}\n"
+        _log(task, f"FAILED: {exc}")
         task.status = DevTask.STATUS_PENDING
-        task.save(update_fields=["agent_log", "status"])
+        task.save(update_fields=["status"])
 
     finally:
         if workspace is not None:
@@ -266,7 +272,7 @@ def answer_pr_question(
 
     from .agents.dev_agent import (
         extract_repo_info,
-        run_claude_agent_for_feedback,
+        run_claude_agent_for_pr_comment,
         setup_workspace,
     )
     from .models import DevTask, Workspace
@@ -274,24 +280,21 @@ def answer_pr_question(
     task = DevTask.objects.select_related("project").get(id=task_id)
     workspace = None
 
-    def _log(msg: str):
-        task.agent_log += f"[{_now()}] {msg}\n"
-        task.save(update_fields=["agent_log"])
-        logger.info("[task-%d] %s", task_id, msg)
-
-    _log(f"[webhook] PR feedback received — @{commenter} ({event_type})")
-    _log(f"[webhook] Comment: {comment_body[:500]}")
+    _log(task, f"[webhook] PR feedback received — @{commenter} ({event_type})")
+    _log(task, f"[webhook] Comment: {comment_body[:500]}")
     if comment_url:
-        _log(f"[webhook] URL: {comment_url}")
+        _log(task, f"[webhook] URL: {comment_url}")
 
     try:
         if not task.branch_name:
-            _log("ERROR: task has no branch_name — cannot process feedback")
+            _log(
+                task, "ERROR: task has no branch_name — cannot process feedback"
+            )
             return
 
         repo_url = task.project.github_repo_url
         if not repo_url:
-            _log("ERROR: project has no github_repo_url")
+            _log(task, "ERROR: project has no github_repo_url")
             return
 
         with transaction.atomic():
@@ -301,23 +304,24 @@ def answer_pr_question(
                 .first()
             )
             if not workspace:
-                _log("No available workspace — feedback not processed (retry by reposting the comment)")
+                _log(
+                    task,
+                    "No available workspace — feedback not processed (retry by reposting the comment)",
+                )
                 return
             workspace.claim(task)
 
-        _log(f"Claimed workspace: {workspace.name}")
+        _log(task, f"Claimed workspace: {workspace.name}")
 
         _, repo_name = extract_repo_info(repo_url)
         repo_path = setup_workspace(workspace.name, repo_url, repo_name)
 
-        _log("Running Claude Code to address feedback…")
+        _log(task, "Running Claude Code to address feedback…")
 
         def _stream(line: str):
-            task.agent_log += f"[{_now()}] {line}\n"
-            task.save(update_fields=["agent_log"])
-            logger.info("[task-%d] %s", task_id, line)
+            _log(task, line)
 
-        run_claude_agent_for_feedback(
+        run_claude_agent_for_pr_comment(
             repo_path=repo_path,
             branch=task.branch_name,
             pr_url=task.pr_url or "",
@@ -330,11 +334,11 @@ def answer_pr_question(
             on_output=_stream,
         )
 
-        _log("Feedback handling complete.")
+        _log(task, "Feedback handling complete.")
 
     except Exception as exc:
         logger.exception("answer_pr_question failed for task %s", task_id)
-        _log(f"ERROR: {exc}")
+        _log(task, f"ERROR: {exc}")
 
     finally:
         if workspace is not None:

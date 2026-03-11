@@ -79,3 +79,61 @@ PR_URL: <pr_url>
 ```
 
 Example: `PR_URL: https://github.com/owner/repo/pull/42`
+
+---
+
+## Git Troubleshooting – Self-Correction Guide
+
+If you hit any git error, **do not give up**. Diagnose and fix it, then continue.
+
+### Stale or corrupt remote-tracking refs
+Symptom: `cannot lock ref 'refs/remotes/origin/...'` or `unable to update local ref`
+```bash
+git remote prune origin          # remove stale remote-tracking refs
+git fetch --prune origin         # re-fetch with pruning
+```
+If that still fails, clear the packed-refs cache and retry:
+```bash
+rm -f .git/packed-refs
+git fetch --prune origin
+```
+
+### Detached HEAD or wrong branch
+```bash
+git checkout main
+git pull origin main
+```
+Then re-create or checkout the feature branch from Step 2.
+
+### Merge conflict during rebase
+```bash
+git rebase --abort               # abandon the rebase
+git checkout <BRANCH_NAME>       # go back to feature branch
+git merge main                   # merge instead of rebase
+# resolve conflicts, then:
+git add -A
+git merge --continue
+```
+
+### Push rejected (non-fast-forward)
+Only happens if the branch was force-pushed upstream. Use `--force-with-lease` (safe):
+```bash
+git push --force-with-lease origin <BRANCH_NAME>
+```
+
+### PR already exists for this branch
+```bash
+gh pr view <BRANCH_NAME>         # get the existing PR URL
+```
+Print that URL as `PR_URL: <url>` and stop — do not open a duplicate.
+
+### Authentication / permission errors
+Check that `GH_TOKEN` is set in the environment:
+```bash
+echo $GH_TOKEN
+gh auth status
+```
+If not authenticated, the task cannot proceed — report the error clearly.
+
+### General rule
+For any other git error: read the error message, fix the root cause, and re-run the failed command. Never skip a failing step or paper over it with `--no-verify` or `--force` unless explicitly listed above.

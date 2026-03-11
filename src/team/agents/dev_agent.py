@@ -17,7 +17,9 @@ DEV_GITHUB_TOKEN = os.environ.get("DEV_GITHUB_TOKEN", "")
 DEV_GIT_NAME = os.environ.get("DEV_GIT_NAME", "Dev Agent")
 DEV_GIT_EMAIL = os.environ.get("DEV_GIT_EMAIL", "dev-agent@localhost")
 
-_SKILL_MD = Path(__file__).parent / "SKILL.md"
+_SKILLS_DIR = Path(__file__).parent / "skills"
+_DEV_TASK_SKILL = _SKILLS_DIR / "DEV_TASK_SKILL.md"
+_PR_COMMENT_SKILL = _SKILLS_DIR / "PR_COMMENT_SKILL.md"
 
 
 # ---------------------------------------------------------------------------
@@ -110,7 +112,16 @@ def setup_workspace(workspace_name: str, repo_url: str, repo_name: str) -> Path:
     else:
         logger.info("Repo exists at %s — fetching", repo_path)
         _run(["git", "remote", "set-url", "origin", auth_url], cwd=repo_path)
-        _run(["git", "fetch", "origin"], cwd=repo_path)
+        # --prune removes stale remote-tracking refs that cause "cannot lock ref" errors
+        try:
+            _run(["git", "fetch", "--prune", "origin"], cwd=repo_path)
+        except RuntimeError:
+            # Corrupt ref state — nuke the packed-refs cache and retry
+            logger.warning("git fetch --prune failed in %s, clearing packed-refs and retrying", repo_path)
+            packed_refs = repo_path / ".git" / "packed-refs"
+            if packed_refs.exists():
+                packed_refs.unlink()
+            _run(["git", "fetch", "--prune", "origin"], cwd=repo_path)
         default = _get_default_branch(repo_path)
         _run(["git", "checkout", default], cwd=repo_path)
         _run(["git", "reset", "--hard", f"origin/{default}"], cwd=repo_path)
@@ -135,7 +146,7 @@ def run_claude_agent(
     Streams output line-by-line; calls on_output(line) for each line if provided.
     Returns the PR URL parsed from Claude's output.
     """
-    (repo_path / "SKILL.md").write_text(_SKILL_MD.read_text())
+    (repo_path / "SKILL.md").write_text(_DEV_TASK_SKILL.read_text())
 
     prompt = (
         f"Follow the instructions in SKILL.md.\n\n"
@@ -188,7 +199,18 @@ def run_claude_agent(
     )
 
 
-def run_claude_agent_for_feedback(
+_CHANGE_REQUEST_KEYWORDS = re.compile(
+    r"\b(update|apply|fix|change|rename|remove|delete|add|refactor|move|replace|please\s+\w+|can\s+you)\b",
+    re.IGNORECASE,
+)
+
+
+def _is_change_request(comment_body: str) -> bool:
+    """Heuristic: return True if the comment is likely requesting a code change."""
+    return bool(_CHANGE_REQUEST_KEYWORDS.search(comment_body))
+
+
+def run_claude_agent_for_pr_comment(
     repo_path: Path,
     branch: str,
     pr_url: str,
@@ -201,59 +223,48 @@ def run_claude_agent_for_feedback(
     on_output: callable = None,
 ) -> None:
     """
-    Checkout *branch* and run Claude Code to address reviewer feedback.
+    Run Claude Code to handle a PR review comment.
 
-    Claude will either:
-    - Answer a question by replying in the original review thread (review_comment)
-      or posting a PR comment (review / pr_comment)
-    - Apply a requested change, commit + push, then acknowledge in the same thread
-
-    Does NOT close or merge the PR.
+    - Writes PR_COMMENT_SKILL.md to the repo so Claude has workflow instructions.
+    - If the comment contains change-request keywords, Claude will implement the
+      change, commit, push, then reply in the original thread.
+    - Otherwise Claude answers the question in-thread without touching the code.
+    - For pull_request_review_comment events the reply goes back into the diff
+      thread via the GitHub replies API; other events get a top-level PR comment.
     """
-    # Sync and checkout the feature branch
-    _run(["git", "fetch", "origin"], cwd=repo_path)
-    try:
-        _run(["git", "checkout", branch], cwd=repo_path)
-        _run(["git", "reset", "--hard", f"origin/{branch}"], cwd=repo_path)
-    except RuntimeError:
-        _run(["git", "checkout", "-b", branch, f"origin/{branch}"], cwd=repo_path)
-
     env = os.environ.copy()
     if DEV_GITHUB_TOKEN:
         env["GH_TOKEN"] = DEV_GITHUB_TOKEN
 
-    # Build the reply command depending on whether we have a thread to reply into.
-    # pull_request_review_comment → reply directly in the diff thread via the replies API.
-    # pull_request_review / issue_comment → post a top-level PR comment.
+    # Write the skill guide so Claude can reference it
+    (repo_path / "PR_COMMENT_SKILL.md").write_text(_PR_COMMENT_SKILL.read_text())
+
+    # Build the exact reply command for this event type
     if event_type == "review_comment" and comment_id and repo_full_name and pr_number:
         reply_cmd = (
-            f"gh api -X POST repos/{repo_full_name}/pulls/{pr_number}/comments/{comment_id}/replies "
-            f"-f body='YOUR_REPLY_HERE'"
+            f"gh api -X POST repos/{repo_full_name}/pulls/{pr_number}"
+            f"/comments/{comment_id}/replies -f body='YOUR_REPLY'"
         )
-        reply_note = "Reply **in the review thread** using the command above (replace YOUR_REPLY_HERE with your message)."
     else:
-        reply_cmd = f"gh pr comment {pr_url} --body 'YOUR_REPLY_HERE'"
-        reply_note = "Post a PR comment using the command above (replace YOUR_REPLY_HERE with your message)."
+        reply_cmd = f"gh pr comment {pr_url} --body 'YOUR_REPLY'"
+
+    hint = (
+        "The reviewer is **requesting a code change** — follow the Change Path in PR_COMMENT_SKILL.md."
+        if _is_change_request(comment_body)
+        else "The reviewer appears to be asking a question — follow the Answer Path in PR_COMMENT_SKILL.md."
+    )
 
     prompt = (
-        f"A reviewer has left feedback on a pull request you own. Address it appropriately.\n\n"
+        f"Follow the instructions in PR_COMMENT_SKILL.md.\n\n"
         f"PR URL: {pr_url}\n"
         f"Branch: {branch}\n"
         f"Reviewer: @{commenter}\n"
-        f"Feedback type: {event_type}\n\n"
+        f"Event type: {event_type}\n\n"
         f"## Reviewer's Comment\n{comment_body}\n\n"
-        f"## Instructions\n"
-        f"1. Read the relevant code files to understand the context.\n"
-        f"2. To reply, use this exact command (substituting your message):\n"
-        f"   `{reply_cmd}`\n"
-        f"   {reply_note}\n"
-        f"3. If the comment is a **question**: reply with your explanation using the command above.\n"
-        f"4. If the comment is a **change request**: implement the change, then:\n"
-        f"   - Stage and commit: `git add -A && git commit -m 'address review feedback from @{commenter}'`\n"
-        f"   - Push: `git push origin {branch}`\n"
-        f"   - Acknowledge using the reply command above.\n"
-        f"5. Always post at least one reply to acknowledge the feedback.\n"
-        f"6. Do NOT close, merge, or delete the PR or branch."
+        f"## Reply Command\n"
+        f"Use this exact command to post your reply (replace YOUR_REPLY with your message):\n"
+        f"`{reply_cmd}`\n\n"
+        f"## Hint\n{hint}"
     )
 
     proc = subprocess.Popen(
@@ -273,7 +284,7 @@ def run_claude_agent_for_feedback(
 
     for raw in proc.stdout:
         line = raw.rstrip("\n")
-        logger.info("[claude-feedback] %s", line)
+        logger.info("[claude-pr-comment] %s", line)
         if on_output:
             on_output(line)
 

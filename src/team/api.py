@@ -67,6 +67,7 @@ def list_active_tasks(request):
             project_name=t.project.name,
             pr_url=t.pr_url,
             has_logs=bool(t.agent_log and t.agent_log.strip()),
+            blocked_by=[b.id for b in t.blocked_by.all()],
         )
         for t in tasks
     ]
@@ -472,7 +473,11 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
 def github_webhook(request):
     import json as _json
     from django.http import HttpResponse
-    from .github import is_dev_agent, parse_pr_comment_event, verify_webhook_signature
+    from .github import (
+        is_dev_agent,
+        parse_pr_comment_event,
+        verify_webhook_signature,
+    )
 
     event = request.headers.get("X-GitHub-Event", "")
     signature = request.headers.get("X-Hub-Signature-256", "")
@@ -532,7 +537,8 @@ def _handle_pr_feedback(comment_info: dict):
     except DevTask.DoesNotExist:
         logger.info(
             "Webhook: no open task for PR %s (commenter: @%s) — ignoring",
-            pr_url, commenter,
+            pr_url,
+            commenter,
         )
         return {"ok": True}
 
@@ -551,7 +557,9 @@ def _handle_pr_feedback(comment_info: dict):
 
     logger.info(
         "Enqueued answer_pr_question for task %s (@%s, %s)",
-        task.id, commenter, comment_info.get("event_type"),
+        task.id,
+        commenter,
+        comment_info.get("event_type"),
     )
 
     return {"ok": True}

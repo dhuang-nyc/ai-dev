@@ -1,12 +1,7 @@
 import { useState, useEffect } from "react";
 import { api } from "../api";
-import {
-  STATUS_COLORS,
-  STATUS_LABELS,
-  TASK_STATUS_COLORS,
-  TASK_STATUS_LABELS,
-} from "../utils";
-import TaskModal from "./TaskModal";
+import { STATUS_COLORS, STATUS_LABELS } from "../utils";
+import TaskTable from "./TaskTable";
 
 export default function Dashboard({ projects, onNewProject, onSelectProject }) {
   const [tasks, setTasks] = useState([]);
@@ -14,8 +9,6 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
   const [loadingTasks, setLoadingTasks] = useState(true);
   const [running, setRunning] = useState(false);
   const [runResult, setRunResult] = useState(null);
-  const [selectedTaskId, setSelectedTaskId] = useState(null);
-
   function fetchTasks() {
     return Promise.all([api.getActiveTasks(), api.getWorkspaces()])
       .then(([t, w]) => {
@@ -30,8 +23,6 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
     fetchTasks();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const pendingTasks = tasks.filter((t) => t.status === "pending");
-  const activeTasks = tasks.filter((t) => t.status !== "pending");
   const availableWs = workspaces.filter((w) => w.is_available).length;
 
   async function handleRunDevAgents() {
@@ -69,6 +60,28 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
     {
       label: "Completed",
       value: projects.filter((p) => p.status === "completed").length,
+      color: "emerald",
+    },
+    {
+      label: "Available Agents",
+      value: workspaces.filter((w) => w.is_available).length,
+      color: "emerald",
+    },
+    {
+      label: "Working DevAgents",
+      value: tasks.filter(
+        (t) => (t.status === "in_progress") | (t.status === "pr_open"),
+      ).length,
+      color: "cyan",
+    },
+    {
+      label: "Open PRs",
+      value: tasks.filter((t) => t.status === "pr_open").length,
+      color: "indigo",
+    },
+    {
+      label: "Completed Tasks",
+      value: tasks.filter((t) => t.status === "done").length,
       color: "emerald",
     },
   ];
@@ -187,38 +200,20 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
             <div className="flex justify-center py-10">
               <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : activeTasks.length === 0 && pendingTasks.length === 0 ? (
+          ) : tasks.length === 0 ? (
             <p className="text-center text-slate-400 text-sm py-10">
               No tasks currently in progress.
             </p>
           ) : (
-            <div className="divide-y divide-slate-100">
-              {activeTasks.map((task) => (
-                <TaskRow
-                  key={task.id}
-                  task={task}
-                  onSelectProject={onSelectProject}
-                  onOpenTask={setSelectedTaskId}
-                />
-              ))}
-              {pendingTasks.length > 0 && (
-                <>
-                  {activeTasks.length > 0 && (
-                    <div className="px-5 py-2 bg-slate-50 text-xs font-semibold text-slate-400 uppercase tracking-wider">
-                      Pending
-                    </div>
-                  )}
-                  {pendingTasks.map((task) => (
-                    <TaskRow
-                      key={task.id}
-                      task={task}
-                      onSelectProject={onSelectProject}
-                      onOpenTask={setSelectedTaskId}
-                    />
-                  ))}
-                </>
-              )}
-            </div>
+            <TaskTable
+              tasks={tasks}
+              onSelectProject={onSelectProject}
+              onTaskSaved={(updated) =>
+                setTasks((prev) =>
+                  prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
+                )
+              }
+            />
           )}
         </div>
       </section>
@@ -233,18 +228,6 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
             Start your first project by describing an idea to the AI Tech Lead.
           </p>
         </div>
-      )}
-
-      {selectedTaskId && (
-        <TaskModal
-          taskId={selectedTaskId}
-          onClose={() => setSelectedTaskId(null)}
-          onSaved={(updated) =>
-            setTasks((prev) =>
-              prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)),
-            )
-          }
-        />
       )}
     </div>
   );
@@ -310,56 +293,6 @@ function ProjectCard({ project, onClick }) {
   );
 }
 
-function TaskRow({ task, onSelectProject, onOpenTask }) {
-  return (
-    <div
-      className="flex items-center gap-4 px-5 py-3.5 hover:bg-slate-50/70 transition-colors cursor-pointer"
-      onClick={() => onOpenTask(task.id)}
-    >
-      <div className="min-w-0 flex-1">
-        <div className="text-sm font-medium text-slate-800 truncate">
-          {task.title}
-        </div>
-        <div className="flex items-center gap-2 mt-0.5">
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelectProject(task.project_id);
-            }}
-            className="text-xs text-indigo-500 hover:text-indigo-700 transition-colors"
-          >
-            {task.project_name}
-          </button>
-          {task.pr_url && (
-            <a
-              href={task.pr_url}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              className="inline-flex items-center gap-1 text-xs text-indigo-500 hover:text-indigo-700 hover:underline"
-            >
-              <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 16 16">
-                <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354Z" />
-              </svg>
-              PR
-            </a>
-          )}
-          {task.has_logs && <span className="text-xs text-slate-400">💬</span>}
-        </div>
-      </div>
-      <span className="text-xs text-slate-400 tabular-nums shrink-0">
-        p{task.priority}
-      </span>
-      <span
-        className={`text-xs font-semibold px-2.5 py-1 rounded-full shrink-0 ${
-          TASK_STATUS_COLORS[task.status] ?? "bg-slate-100 text-slate-600"
-        }`}
-      >
-        {TASK_STATUS_LABELS[task.status] ?? task.status}
-      </span>
-    </div>
-  );
-}
 
 function greeting() {
   const h = new Date().getHours();

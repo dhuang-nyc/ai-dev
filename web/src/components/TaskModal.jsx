@@ -183,17 +183,6 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
                 )}
               </div>
 
-              {/* Agent Log */}
-              {task.agent_log && (
-                <div>
-                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
-                    Agent Log
-                  </label>
-                  <pre className="text-xs font-mono text-slate-600 bg-slate-900 text-slate-100 rounded-lg px-3 py-2.5 overflow-x-auto whitespace-pre-wrap max-h-48 overflow-y-auto">
-                    {task.agent_log}
-                  </pre>
-                </div>
-              )}
             </>
           )}
         </div>

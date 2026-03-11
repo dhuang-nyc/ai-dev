@@ -84,6 +84,7 @@ class DashboardTaskSchema(Schema):
     project_id: int
     project_name: str
     pr_url: Optional[str]
+    blocked_by: list[int]
     has_logs: bool
 
 
