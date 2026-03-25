@@ -50,7 +50,7 @@ services:
       # API, admin, and static routes — more specific rules take priority over the web catch-all
       - "traefik.http.routers.capyai-django.rule=Host(`capyai.daisyhuang.dev`) && (PathPrefix(`/api/`) || PathPrefix(`/admin/`) || PathPrefix(`/static/`))"
       - "traefik.http.routers.capyai-django.entrypoints=websecure"
-      - "traefik.http.routers.capyai-django.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.capyai-django.tls.certresolver=cloudflare"
       - "traefik.http.services.capyai-django.loadbalancer.server.port=8000"
 
   celery:
@@ -81,7 +81,7 @@ services:
       - "traefik.docker.network=proxy"
       - "traefik.http.routers.capyai-flower.rule=Host(`flower.capyai.daisyhuang.dev`)"
       - "traefik.http.routers.capyai-flower.entrypoints=websecure"
-      - "traefik.http.routers.capyai-flower.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.capyai-flower.tls.certresolver=cloudflare"
       - "traefik.http.services.capyai-flower.loadbalancer.server.port=5555"
       - "traefik.http.routers.capyai-flower.middlewares=capyai-flower-auth"
       # Generate with: echo $(htpasswd -nB admin) | sed -e s/\\$/\\$\\$/g
@@ -108,7 +108,7 @@ services:
       # Catch-all for the domain — lower priority than the django router (Traefik auto-ranks by rule specificity)
       - "traefik.http.routers.capyai-web.rule=Host(`capyai.daisyhuang.dev`)"
       - "traefik.http.routers.capyai-web.entrypoints=websecure"
-      - "traefik.http.routers.capyai-web.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.capyai-web.tls.certresolver=cloudflare"
       - "traefik.http.services.capyai-web.loadbalancer.server.port=4173"
 
 networks:
