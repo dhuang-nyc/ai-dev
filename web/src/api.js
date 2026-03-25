@@ -1,5 +1,12 @@
+class ApiError extends Error {
+  constructor(status, message) {
+    super(message)
+    this.status = status
+  }
+}
+
 async function req(method, path, body) {
-  const opts = { method, headers: {} }
+  const opts = { method, headers: {}, credentials: 'include' }
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json'
     opts.body = JSON.stringify(body)
@@ -8,12 +15,15 @@ async function req(method, path, body) {
   if (!res.ok) {
     let msg = `HTTP ${res.status}`
     try { const d = await res.json(); msg = d.detail ?? JSON.stringify(d) } catch { /* empty */ }
-    throw new Error(msg)
+    throw new ApiError(res.status, msg)
   }
   return res.json()
 }
 
 export const api = {
+  me:             ()             => req('GET',  '/auth/me/'),
+  login:          (u, p)        => req('POST', '/auth/login/', { username: u, password: p }),
+  logout:         ()             => req('POST', '/auth/logout/'),
   getActiveTasks: ()             => req('GET',  '/tasks/'),
   getWorkspaces:  ()             => req('GET',  '/workspaces/'),
   listProjects:   ()             => req('GET',  '/projects/'),

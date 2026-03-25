@@ -2,27 +2,41 @@ import { useState, useEffect, useCallback } from "react";
 import Sidebar from "./components/Sidebar";
 import ProjectDetail from "./components/ProjectDetail";
 import NewProjectModal from "./components/NewProjectModal";
+import LoginPage from "./components/LoginPage";
 import { api } from "./api";
 import Dashboard from "./components/Dashboard";
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [authChecked, setAuthChecked] = useState(false);
   const [projects, setProjects] = useState([]);
   const [selectedId, setSelectedId] = useState(null);
   const [project, setProject] = useState(null);
   const [loadingProject, setLoading] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
 
+  useEffect(() => {
+    api
+      .me()
+      .then((data) => {
+        if (data.authenticated) setUser(data);
+      })
+      .catch(() => {})
+      .finally(() => setAuthChecked(true));
+  }, []);
+
   const fetchProjects = useCallback(async () => {
     try {
       setProjects(await api.listProjects());
     } catch (e) {
-      console.error(e);
+      if (e.status === 401) setUser(null);
+      else console.error(e);
     }
   }, []);
 
   useEffect(() => {
-    fetchProjects();
-  }, [fetchProjects]);
+    if (user) fetchProjects();
+  }, [user, fetchProjects]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -36,7 +50,10 @@ export default function App() {
         setProject(p);
         setLoading(false);
       })
-      .catch(() => setLoading(false));
+      .catch((e) => {
+        if (e.status === 401) setUser(null);
+        setLoading(false);
+      });
   }, [selectedId]);
 
   async function handleRefresh() {
@@ -56,6 +73,30 @@ export default function App() {
     setSelectedId(projectId);
   }
 
+  async function handleLogout() {
+    try {
+      await api.logout();
+    } catch {
+      /* empty */
+    }
+    setUser(null);
+    setProjects([]);
+    setSelectedId(null);
+    setProject(null);
+  }
+
+  if (!authChecked) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-900">
+        <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (!user) {
+    return <LoginPage onLogin={setUser} />;
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100">
       <Sidebar
@@ -63,6 +104,7 @@ export default function App() {
         selectedId={selectedId}
         onSelect={setSelectedId}
         onNewProject={() => setShowNewModal(true)}
+        onLogout={handleLogout}
       />
 
       <main className="flex-1 overflow-y-auto">
@@ -94,4 +136,3 @@ export default function App() {
     </div>
   );
 }
-

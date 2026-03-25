@@ -5,6 +5,7 @@ export default function Sidebar({
   selectedId,
   onSelect,
   onNewProject,
+  onLogout,
 }) {
   return (
     <aside className="w-72 bg-slate-900 flex flex-col h-full shrink-0 border-r border-slate-800">
@@ -80,13 +81,19 @@ export default function Sidebar({
         )}
       </div>
 
-      {/* New Project */}
-      <div className="p-3 border-t border-slate-700/60">
+      {/* Footer */}
+      <div className="p-3 border-t border-slate-700/60 flex flex-col gap-2">
         <button
           onClick={onNewProject}
           className="w-full py-2.5 px-4 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold rounded-xl transition-all hover:-translate-y-0.5 shadow-md shadow-indigo-900/40"
         >
           + New Project
+        </button>
+        <button
+          onClick={onLogout}
+          className="w-full py-2 px-4 text-slate-500 hover:text-slate-300 text-xs font-medium rounded-xl transition-colors hover:bg-slate-800/60"
+        >
+          Sign out
         </button>
       </div>
     </aside>

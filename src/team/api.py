@@ -1,7 +1,11 @@
 import logging
 
-from ninja import NinjaAPI
+from django.contrib.auth import authenticate
+from django.contrib.auth import login as django_login
+from django.contrib.auth import logout as django_logout
+from ninja import NinjaAPI, Schema
 from ninja.errors import HttpError
+from ninja.security import django_auth
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +29,39 @@ from .schemas import (
     WorkspaceSchema,
 )
 
-api = NinjaAPI()
+api = NinjaAPI(auth=django_auth)
+
+
+class LoginSchema(Schema):
+    username: str
+    password: str
+
+
+class AuthUserSchema(Schema):
+    username: str | None
+    authenticated: bool
+
+
+@api.get("/auth/me/", auth=None, response=AuthUserSchema)
+def auth_me(request):
+    if request.user.is_authenticated:
+        return AuthUserSchema(username=request.user.username, authenticated=True)
+    return AuthUserSchema(username=None, authenticated=False)
+
+
+@api.post("/auth/login/", auth=None, response=AuthUserSchema)
+def auth_login(request, payload: LoginSchema):
+    user = authenticate(request, username=payload.username, password=payload.password)
+    if user is None:
+        raise HttpError(401, "Invalid credentials")
+    django_login(request, user)
+    return AuthUserSchema(username=user.username, authenticated=True)
+
+
+@api.post("/auth/logout/", auth=None)
+def auth_logout(request):
+    django_logout(request)
+    return {"ok": True}
 
 
 @api.get("/tasks/", response=list[DashboardTaskSchema])
@@ -469,7 +505,7 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
     )
 
 
-@api.post("/github/webhook/")
+@api.post("/github/webhook/", auth=None)
 def github_webhook(request):
     import json as _json
     from django.http import HttpResponse
