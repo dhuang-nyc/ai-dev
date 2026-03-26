@@ -6,19 +6,39 @@ export default function Sidebar({
   onSelect,
   onNewProject,
   onLogout,
+  isOpen,
+  onClose,
 }) {
+  function handleSelect(id) {
+    onSelect(id);
+    onClose?.();
+  }
+
   return (
-    <aside className="w-72 bg-slate-900 flex flex-col h-full shrink-0 border-r border-slate-800">
+    <aside
+      className={`w-72 bg-slate-900 flex flex-col shrink-0 border-r border-slate-800
+        fixed inset-y-0 left-0 z-40 transition-transform duration-300
+        sm:relative sm:translate-x-0 sm:h-full
+        ${isOpen ? "translate-x-0" : "-translate-x-full"}`}
+    >
       {/* Header */}
       <div className="px-5 py-4 border-b border-slate-700/60">
-        <div className="flex items-center gap-3">
-          <Logo />
-          <div>
-            <div className="text-white font-bold text-sm tracking-tight">
-              {APP_NAME}
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Logo />
+            <div>
+              <div className="text-white font-bold text-sm tracking-tight">
+                {APP_NAME}
+              </div>
+              <div className="text-slate-500 text-xs">Daisy's Dev Team</div>
             </div>
-            <div className="text-slate-500 text-xs">Daisy's Dev Team</div>
           </div>
+          <button
+            onClick={onClose}
+            className="sm:hidden w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+          >
+            ✕
+          </button>
         </div>
       </div>
 
@@ -38,7 +58,7 @@ export default function Sidebar({
             return (
               <button
                 key={p.id}
-                onClick={() => onSelect(p.id)}
+                onClick={() => handleSelect(p.id)}
                 style={{ animationDelay: `${i * 35}ms` }}
                 className={`w-full text-left px-3 py-2.5 rounded-lg mb-0.5 transition-all duration-150 animate-slidein border group ${
                   active

@@ -87,9 +87,9 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
   ];
 
   return (
-    <div className="w-full animate-fadein px-12 py-24 flex flex-col gap-8">
+    <div className="w-full animate-fadein px-4 py-8 sm:px-12 sm:py-24 flex flex-col gap-8">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
           <h1 className="text-2xl font-bold text-slate-900">{greeting()} ✦</h1>
           <p className="text-sm text-slate-500 mt-0.5">
@@ -107,7 +107,7 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-4 gap-3">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {stats.map((s) => (
           <StatCard key={s.label} {...s} />
         ))}
@@ -119,7 +119,7 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
           <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider mb-3">
             Recent Projects
           </h2>
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {projects.slice(0, 6).map((p) => (
               <ProjectCard
                 key={p.id}
@@ -171,11 +171,11 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
 
       {/* Active & pending tasks */}
       <section>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between flex-wrap gap-2 mb-3">
           <h2 className="text-sm font-semibold text-slate-600 uppercase tracking-wider">
             Tasks
           </h2>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             {runResult && (
               <span className="text-xs text-slate-500 animate-fadein">
                 {runResult.message}

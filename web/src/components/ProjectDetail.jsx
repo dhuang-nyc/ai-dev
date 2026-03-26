@@ -26,12 +26,12 @@ export default function ProjectDetail({ project, onRefresh }) {
   }
 
   return (
-    <div className="w-full animate-fadein px-12 py-24 flex flex-col gap-8">
+    <div className="w-full animate-fadein px-4 py-8 sm:px-12 sm:py-24 flex flex-col gap-8">
       {/* Project header */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
         <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-500" />
         <div className="px-6 py-5">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start justify-between gap-4 flex-wrap">
             <div className="min-w-0">
               <h1 className="text-xl font-bold text-slate-900 truncate">
                 {project.name}

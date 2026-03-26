@@ -5,6 +5,7 @@ import NewProjectModal from "./components/NewProjectModal";
 import LoginPage from "./components/LoginPage";
 import { api } from "./api";
 import Dashboard from "./components/Dashboard";
+import { APP_NAME } from "./utils";
 
 export default function App() {
   const [user, setUser] = useState(null);
@@ -14,6 +15,7 @@ export default function App() {
   const [project, setProject] = useState(null);
   const [loadingProject, setLoading] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     api
@@ -99,15 +101,36 @@ export default function App() {
 
   return (
     <div className="flex h-screen overflow-hidden bg-slate-100">
+      {/* Mobile sidebar backdrop */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black/50 z-30 sm:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+
       <Sidebar
         projects={projects}
         selectedId={selectedId}
         onSelect={setSelectedId}
         onNewProject={() => setShowNewModal(true)}
         onLogout={handleLogout}
+        isOpen={sidebarOpen}
+        onClose={() => setSidebarOpen(false)}
       />
 
       <main className="flex-1 overflow-y-auto">
+        {/* Mobile top bar */}
+        <div className="sm:hidden sticky top-0 z-20 flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="w-8 h-8 flex items-center justify-center rounded-lg text-slate-600 hover:bg-slate-100 transition-colors text-lg"
+          >
+            ☰
+          </button>
+          <span className="font-bold text-sm text-slate-900">{APP_NAME}</span>
+        </div>
+
         {loadingProject ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />

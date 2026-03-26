@@ -22,30 +22,39 @@ export default function NewProjectModal({ onClose, onCreated }) {
 
   return (
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-end sm:items-center justify-center z-50 sm:p-4"
       onClick={e => e.target === e.currentTarget && onClose()}
     >
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg animate-fadein overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-500" />
-        <div className="px-6 py-5">
-          <h2 className="text-lg font-bold text-slate-900 mb-1">New Project</h2>
+      <div className="bg-white w-full h-dvh sm:h-auto sm:rounded-2xl sm:max-w-lg animate-fadein overflow-hidden flex flex-col">
+        <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-500 shrink-0" />
+        <div className="px-6 py-5 flex flex-col flex-1">
+          <div className="flex items-start justify-between mb-1">
+            <h2 className="text-lg font-bold text-slate-900">New Project</h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors shrink-0 -mt-0.5"
+            >
+              ✕
+            </button>
+          </div>
           <p className="text-sm text-slate-500 mb-4">
             Describe your idea — the Tech Lead will ask questions and build a plan.
           </p>
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="flex flex-col flex-1">
             <textarea
               value={idea}
               onChange={e => setIdea(e.target.value)}
               placeholder="e.g. Build a user auth system with email/password login, OAuth, and password reset flow…"
               rows={5}
               autoFocus
-              className="w-full text-sm px-4 py-3 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 placeholder:text-slate-400 bg-slate-50 transition-shadow"
+              className="w-full flex-1 sm:flex-none text-sm px-4 py-3 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-400 placeholder:text-slate-400 bg-slate-50 transition-shadow"
             />
             {error && (
               <p className="text-red-500 text-xs mt-2 bg-red-50 px-3 py-2 rounded-lg">{error}</p>
             )}
-            <div className="flex justify-end gap-3 mt-4">
+            <div className="flex justify-end gap-3 mt-4 pb-safe">
               <button
                 type="button"
                 onClick={onClose}
