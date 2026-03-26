@@ -2,6 +2,7 @@ import { useState } from "react";
 import ChatPanel from "./ChatPanel";
 import TechSpecPanel from "./TechSpecPanel";
 import TasksPanel from "./TasksPanel";
+import PMChatPanel from "./PMChatPanel";
 import { STATUS_COLORS, STATUS_LABELS } from "../utils";
 import { api } from "../api";
 
@@ -117,9 +118,19 @@ export default function ProjectDetail({ project, onRefresh }) {
         </div>
       </div>
 
-      <ChatPanel projectId={project.id} />
-      {project.tech_spec && <TechSpecPanel techSpec={project.tech_spec} />}
-      <TasksPanel projectId={project.id} />
+      {/* Section nav */}
+      <div className="sticky top-4 z-10 flex items-center gap-2 flex-wrap bg-white/80 backdrop-blur border border-slate-200 rounded-xl shadow-sm px-4 py-2.5">
+        <span className="text-xs text-slate-400 font-medium mr-1">Jump to:</span>
+        <NavBtn href="#chat">Chat</NavBtn>
+        {project.tech_spec && <NavBtn href="#tech-spec">Tech Spec</NavBtn>}
+        <NavBtn href="#tasks">Tasks</NavBtn>
+        <NavBtn href="#pm-chat">PM Chat</NavBtn>
+      </div>
+
+      <div id="chat"><ChatPanel projectId={project.id} /></div>
+      {project.tech_spec && <div id="tech-spec"><TechSpecPanel techSpec={project.tech_spec} /></div>}
+      <div id="tasks"><TasksPanel projectId={project.id} /></div>
+      <div id="pm-chat"><PMChatPanel projectId={project.id} /></div>
     </div>
   );
 }
@@ -146,6 +157,17 @@ const COLOR_MAP = {
   emerald: "bg-emerald-500 hover:bg-emerald-600 shadow-emerald-200",
   red: "bg-red-500 hover:bg-red-600 shadow-red-200",
 };
+
+function NavBtn({ href, children }) {
+  return (
+    <a
+      href={href}
+      className="px-3 py-1 text-xs font-semibold text-slate-600 hover:text-indigo-600 hover:bg-indigo-50 rounded-lg transition-colors"
+    >
+      {children}
+    </a>
+  );
+}
 
 function Btn({ children, onClick, loading, color }) {
   return (

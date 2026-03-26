@@ -5,11 +5,19 @@ class ApiError extends Error {
   }
 }
 
+function getCsrfToken() {
+  const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]*)/)
+  return match ? decodeURIComponent(match[1]) : ''
+}
+
 async function req(method, path, body) {
   const opts = { method, headers: {}, credentials: 'include' }
   if (body !== undefined) {
     opts.headers['Content-Type'] = 'application/json'
     opts.body = JSON.stringify(body)
+  }
+  if (!['GET', 'HEAD', 'OPTIONS', 'TRACE'].includes(method.toUpperCase())) {
+    opts.headers['X-CSRFToken'] = getCsrfToken()
   }
   const res = await fetch('/api' + path, opts)
   if (!res.ok) {
@@ -39,4 +47,10 @@ export const api = {
   startProject:   (id)           => req('POST', `/projects/${id}/start/`),
   markStatus:     (id, status)   => req('POST', `/projects/${id}/mark-status/?status=${status}`),
   runDevAgents:   ()             => req('POST', '/dev-agent/run/'),
+  // PM
+  createPMConversation:   ()             => req('POST', '/pm/conversations/'),
+  sendPMMessage:          (id, content)  => req('POST', `/pm/conversations/${id}/chat/`, { content }),
+  getPMMessages:          (id)           => req('GET',  `/pm/conversations/${id}/messages/`),
+  getPMMessage:           (id)           => req('GET',  `/pm/messages/${id}/`),
+  getProjectPMConversation: (id)         => req('GET',  `/projects/${id}/pm-conversation/`),
 }

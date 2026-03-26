@@ -9,7 +9,7 @@ from ninja.security import django_auth
 
 logger = logging.getLogger(__name__)
 
-from .models import Conversation, DevTask, Message, Project
+from .models import Conversation, DevTask, Message, PMConversation, PMMessage, Project
 from .schemas import (
     ApproveResponseSchema,
     ChatRequestSchema,
@@ -19,6 +19,9 @@ from .schemas import (
     DashboardTaskSchema,
     DevTaskSchema,
     MessageSchema,
+    PMChatResponseSchema,
+    PMConversationSchema,
+    PMMessageSchema,
     ProjectDetailSchema,
     ProjectListSchema,
     ProjectStatusResponseSchema,
@@ -44,6 +47,8 @@ class AuthUserSchema(Schema):
 
 @api.get("/auth/me/", auth=None, response=AuthUserSchema)
 def auth_me(request):
+    from django.middleware.csrf import get_token
+    get_token(request)  # ensures CSRF cookie is set for subsequent POST requests
     if request.user.is_authenticated:
         return AuthUserSchema(username=request.user.username, authenticated=True)
     return AuthUserSchema(username=None, authenticated=False)
@@ -503,6 +508,115 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
         agent_log=t.agent_log,
         claude_prompt=t.claude_prompt,
     )
+
+
+# ---------------------------------------------------------------------------
+# PM Conversation endpoints
+# ---------------------------------------------------------------------------
+
+@api.post("/pm/conversations/", response=PMConversationSchema)
+def create_pm_conversation(request):
+    conversation = PMConversation.objects.create()
+    return PMConversationSchema(
+        id=conversation.id,
+        project_id=conversation.project_id,
+        created_at=conversation.created_at,
+    )
+
+
+@api.post("/pm/conversations/{conversation_id}/chat/", response=PMChatResponseSchema)
+def pm_chat(request, conversation_id: int, payload: ChatRequestSchema):
+    try:
+        conversation = PMConversation.objects.get(id=conversation_id)
+    except PMConversation.DoesNotExist:
+        raise HttpError(404, "PM conversation not found")
+
+    user_msg = PMMessage.objects.create(
+        conversation=conversation,
+        role=PMMessage.ROLE_USER,
+        content=payload.content,
+    )
+    assistant_msg = PMMessage.objects.create(
+        conversation=conversation,
+        role=PMMessage.ROLE_ASSISTANT,
+        content="",
+        processing=True,
+    )
+
+    from .tasks import process_pm_message
+
+    process_pm_message.delay(conversation_id, assistant_msg.id)
+
+    return PMChatResponseSchema(
+        user_message_id=user_msg.id,
+        assistant_message_id=assistant_msg.id,
+    )
+
+
+@api.get("/pm/conversations/{conversation_id}/messages/", response=list[PMMessageSchema])
+def get_pm_messages(request, conversation_id: int):
+    try:
+        conversation = PMConversation.objects.get(id=conversation_id)
+    except PMConversation.DoesNotExist:
+        raise HttpError(404, "PM conversation not found")
+
+    messages = conversation.messages.order_by("created_at")
+    project_id = conversation.project_id
+    return [
+        PMMessageSchema(
+            id=m.id,
+            role=m.role,
+            content=m.content,
+            processing=m.processing,
+            created_at=m.created_at,
+            conversation_project_id=project_id,
+        )
+        for m in messages
+    ]
+
+
+@api.get("/pm/messages/{message_id}/", response=PMMessageSchema)
+def get_pm_message(request, message_id: int):
+    try:
+        msg = PMMessage.objects.select_related("conversation").get(id=message_id)
+    except PMMessage.DoesNotExist:
+        raise HttpError(404, "PM message not found")
+
+    return PMMessageSchema(
+        id=msg.id,
+        role=msg.role,
+        content=msg.content,
+        processing=msg.processing,
+        created_at=msg.created_at,
+        conversation_project_id=msg.conversation.project_id,
+    )
+
+
+@api.get("/projects/{project_id}/pm-conversation/", response=list[PMMessageSchema])
+def get_project_pm_conversation(request, project_id: int):
+    try:
+        project = Project.objects.get(id=project_id)
+    except Project.DoesNotExist:
+        raise HttpError(404, "Project not found")
+
+    try:
+        conversation = project.pm_conversation
+    except PMConversation.DoesNotExist:
+        return []
+
+    project_id_val = conversation.project_id
+    messages = conversation.messages.order_by("created_at")
+    return [
+        PMMessageSchema(
+            id=m.id,
+            role=m.role,
+            content=m.content,
+            processing=m.processing,
+            created_at=m.created_at,
+            conversation_project_id=project_id_val,
+        )
+        for m in messages
+    ]
 
 
 @api.post("/github/webhook/", auth=None)

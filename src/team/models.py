@@ -121,6 +121,43 @@ class DevTask(models.Model):
         return self.title
 
 
+class PMConversation(BaseModel):
+    project = models.OneToOneField(
+        Project,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="pm_conversation",
+    )
+
+    def __str__(self):
+        if self.project_id:
+            return f"PM Conversation → {self.project}"
+        return f"PM Conversation #{self.pk} (in progress)"
+
+
+class PMMessage(BaseModel):
+    ROLE_USER = "user"
+    ROLE_ASSISTANT = "assistant"
+    ROLE_CHOICES = [
+        (ROLE_USER, "User"),
+        (ROLE_ASSISTANT, "Assistant"),
+    ]
+
+    conversation = models.ForeignKey(
+        PMConversation, on_delete=models.CASCADE, related_name="messages"
+    )
+    role = models.CharField(max_length=20, choices=ROLE_CHOICES)
+    content = models.TextField()
+    processing = models.BooleanField(default=False)
+
+    class Meta:
+        ordering = ["created_at"]
+
+    def __str__(self):
+        return f"{self.role}: {self.content[:50]}"
+
+
 class Workspace(models.Model):
     name = models.CharField(max_length=100, unique=True)
     current_task = models.OneToOneField(

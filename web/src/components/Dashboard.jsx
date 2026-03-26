@@ -3,7 +3,7 @@ import { api } from "../api";
 import { STATUS_COLORS, STATUS_LABELS } from "../utils";
 import TaskTable from "./TaskTable";
 
-export default function Dashboard({ projects, onNewProject, onSelectProject }) {
+export default function Dashboard({ projects, onNewProject, onIterateIdea, onSelectProject }) {
   const [tasks, setTasks] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
   const [loadingTasks, setLoadingTasks] = useState(true);
@@ -98,12 +98,20 @@ export default function Dashboard({ projects, onNewProject, onSelectProject }) {
               : `${projects.length} project${projects.length !== 1 ? "s" : ""} in your workspace`}
           </p>
         </div>
-        <button
-          onClick={onNewProject}
-          className="px-5 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold rounded-xl transition-all hover:-translate-y-0.5 shadow-md shadow-indigo-200"
-        >
-          + New Project
-        </button>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={onIterateIdea}
+            className="px-4 py-2.5 bg-violet-500 hover:bg-violet-600 text-white text-sm font-semibold rounded-xl transition-all hover:-translate-y-0.5 shadow-md shadow-violet-200"
+          >
+            ✦ Iterate a New Idea
+          </button>
+          <button
+            onClick={onNewProject}
+            className="px-4 py-2.5 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-semibold rounded-xl transition-all hover:-translate-y-0.5 shadow-md shadow-indigo-200"
+          >
+            + New Project
+          </button>
+        </div>
       </div>
 
       {/* Stats */}

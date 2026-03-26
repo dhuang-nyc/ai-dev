@@ -121,3 +121,24 @@ class ProjectDetailSchema(Schema):
     created_at: datetime
     updated_at: datetime
     tech_spec: Optional[TechSpecSchema]
+
+
+class PMMessageSchema(Schema):
+    id: int
+    role: str
+    content: str
+    processing: bool
+    created_at: datetime
+    # Populated when start_project was called during this PM conversation
+    conversation_project_id: Optional[int]
+
+
+class PMConversationSchema(Schema):
+    id: int
+    project_id: Optional[int]
+    created_at: datetime
+
+
+class PMChatResponseSchema(Schema):
+    user_message_id: int
+    assistant_message_id: int

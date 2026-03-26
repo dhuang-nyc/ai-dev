@@ -4,7 +4,7 @@ from datetime import datetime, timezone
 from celery import shared_task
 
 from team.agents.team_lead import extract_tasks
-from team.models import DevTask
+from team.models import DevTask, PMMessage
 
 logger = logging.getLogger(__name__)
 
@@ -343,6 +343,46 @@ def answer_pr_question(
     finally:
         if workspace is not None:
             workspace.release()
+
+
+@shared_task(bind=True, max_retries=3, default_retry_delay=5)
+def process_pm_message(self, pm_conversation_id: int, assistant_message_id: int):
+    from .agents.product_manager import run_pm_with_history
+    from .models import PMConversation, PMMessage
+
+    try:
+        conversation = PMConversation.objects.get(id=pm_conversation_id)
+        assistant_msg = PMMessage.objects.get(id=assistant_message_id)
+
+        all_messages = list(
+            conversation.messages.exclude(id=assistant_message_id).order_by("created_at")
+        )
+
+        if not all_messages:
+            assistant_msg.content = "No messages found to process."
+            assistant_msg.processing = False
+            assistant_msg.save()
+            return
+
+        history = [{"role": m.role, "content": m.content} for m in all_messages[:-1]]
+        new_user_message = all_messages[-1].content
+
+        result = run_pm_with_history(pm_conversation_id, history, new_user_message)
+
+        assistant_msg.content = result["response"]
+        assistant_msg.processing = False
+        assistant_msg.save()
+
+    except Exception as exc:
+        logger.exception("Error processing PM message %s", assistant_message_id)
+        try:
+            msg = PMMessage.objects.get(id=assistant_message_id)
+            msg.content = f"Error: {exc}"
+            msg.processing = False
+            msg.save()
+        except Exception:
+            pass
+        raise self.retry(exc=exc)
 
 
 @shared_task

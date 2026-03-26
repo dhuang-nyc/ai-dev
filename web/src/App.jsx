@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import Sidebar from "./components/Sidebar";
 import ProjectDetail from "./components/ProjectDetail";
 import NewProjectModal from "./components/NewProjectModal";
+import PMChatModal from "./components/PMChatModal";
 import LoginPage from "./components/LoginPage";
 import { api } from "./api";
 import Dashboard from "./components/Dashboard";
@@ -15,6 +16,7 @@ export default function App() {
   const [project, setProject] = useState(null);
   const [loadingProject, setLoading] = useState(false);
   const [showNewModal, setShowNewModal] = useState(false);
+  const [showPMModal, setShowPMModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
@@ -145,6 +147,7 @@ export default function App() {
           <Dashboard
             projects={projects}
             onNewProject={() => setShowNewModal(true)}
+            onIterateIdea={() => setShowPMModal(true)}
             onSelectProject={setSelectedId}
           />
         )}
@@ -154,6 +157,17 @@ export default function App() {
         <NewProjectModal
           onClose={() => setShowNewModal(false)}
           onCreated={handleProjectCreated}
+        />
+      )}
+
+      {showPMModal && (
+        <PMChatModal
+          onClose={() => setShowPMModal(false)}
+          onProjectCreated={(projectId) => {
+            setShowPMModal(false);
+            fetchProjects();
+            setSelectedId(projectId);
+          }}
         />
       )}
     </div>
