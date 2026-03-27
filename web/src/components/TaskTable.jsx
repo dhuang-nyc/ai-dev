@@ -2,6 +2,7 @@ import { useState } from "react";
 import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from "../utils";
 import TaskModal from "./TaskModal";
 import AgentLogModal from "./AgentLogModal";
+import AgentCostSummary from "./AgentCostSummary";
 
 const STATUS_ORDER = {
   pr_open: 0,
@@ -30,6 +31,7 @@ const PR_ICON = (
 
 function TaskRow({ task, index, onOpenTask, onOpenLog, onSelectProject }) {
   const hasLog = task.has_logs || task.agent_log?.trim();
+  const duration = task.completed_at - task.started_at;
 
   return (
     <div
@@ -109,6 +111,7 @@ function TaskRow({ task, index, onOpenTask, onOpenLog, onSelectProject }) {
               💬
             </button>
           )}
+          <AgentCostSummary cost={task.total_cost} timeMs={duration} />
         </div>
       </div>
 

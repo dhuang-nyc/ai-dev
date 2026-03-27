@@ -124,6 +124,9 @@ def list_active_tasks(request):
             pr_url=t.pr_url,
             has_logs=bool(t.agent_log and t.agent_log.strip()),
             blocked_by=[b.id for b in t.blocked_by.all()],
+            total_cost=t.total_cost,
+            started_at=t.started_at,
+            completed_at=t.completed_at,
         )
         for t in tasks
     ]
@@ -148,6 +151,35 @@ def list_workspaces(request):
     ]
 
 
+def _project_cost_summary(project_id):
+    from django.db.models import Sum
+
+    tl = Message.objects.filter(
+        conversation__project_id=project_id, role="assistant"
+    ).aggregate(cost=Sum("token_cost"), time=Sum("response_time_ms"))
+
+    pm = PMMessage.objects.filter(
+        conversation__project_id=project_id, role="assistant"
+    ).aggregate(cost=Sum("token_cost"), time=Sum("response_time_ms"))
+
+    dt = DevTask.objects.filter(project_id=project_id).aggregate(
+        cost=Sum("total_cost")
+    )
+
+    task_time_ms = 0
+    for t in DevTask.objects.filter(
+        project_id=project_id,
+        started_at__isnull=False,
+        completed_at__isnull=False,
+    ).only("started_at", "completed_at"):
+        task_time_ms += int((t.completed_at - t.started_at).total_seconds() * 1000)
+
+    total_cost = (tl["cost"] or 0) + (pm["cost"] or 0) + (dt["cost"] or 0)
+    total_time = (tl["time"] or 0) + (pm["time"] or 0) + task_time_ms
+
+    return total_cost or None, total_time or None
+
+
 @api.get("/projects/", response=list[ProjectListSchema])
 def list_projects(request):
     from django.db.models import Count, Exists, OuterRef
@@ -157,7 +189,23 @@ def list_projects(request):
         task_count=Count("dev_tasks"),
         has_tech_spec=Exists(TechSpec.objects.filter(project=OuterRef("pk"))),
     ).order_by("-created_at")
-    return list(projects)
+
+    result = []
+    for p in projects:
+        cost, time_ms = _project_cost_summary(p.id)
+        result.append(ProjectListSchema(
+            id=p.id,
+            name=p.name,
+            description=p.description,
+            status=p.status,
+            github_repo_url=p.github_repo_url,
+            created_at=p.created_at,
+            has_tech_spec=p.has_tech_spec,
+            task_count=p.task_count,
+            total_cost=cost,
+            total_agent_time_ms=time_ms,
+        ))
+    return result
 
 
 @api.get("/projects/{project_id}/", response=ProjectDetailSchema)
@@ -174,6 +222,8 @@ def get_project(request, project_id: int):
     except Exception:
         pass
 
+    cost, time_ms = _project_cost_summary(project_id)
+
     return ProjectDetailSchema(
         id=project.id,
         name=project.name,
@@ -183,6 +233,8 @@ def get_project(request, project_id: int):
         created_at=project.created_at,
         updated_at=project.updated_at,
         tech_spec=tech_spec,
+        total_cost=cost,
+        total_agent_time_ms=time_ms,
     )
 
 
@@ -276,6 +328,8 @@ def get_messages(request, project_id: int):
             content=m.content,
             processing=m.processing,
             created_at=m.created_at,
+            token_cost=m.token_cost,
+            response_time_ms=m.response_time_ms,
         )
         for m in messages
     ]
@@ -294,6 +348,8 @@ def get_message(request, message_id: int):
         content=msg.content,
         processing=msg.processing,
         created_at=msg.created_at,
+        token_cost=msg.token_cost,
+        response_time_ms=msg.response_time_ms,
     )
 
 
@@ -451,6 +507,9 @@ def get_tasks(request, project_id: int):
             branch_name=t.branch_name,
             agent_log=t.agent_log,
             claude_prompt=t.claude_prompt,
+            total_cost=t.total_cost,
+            started_at=t.started_at,
+            completed_at=t.completed_at,
         )
         for t in tasks
     ]
@@ -474,6 +533,9 @@ def get_task(request, task_id: int):
         branch_name=t.branch_name,
         agent_log=t.agent_log,
         claude_prompt=t.claude_prompt,
+        total_cost=t.total_cost,
+        started_at=t.started_at,
+        completed_at=t.completed_at,
     )
 
 
@@ -495,11 +557,19 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
             setattr(t, field, val)
             update_fields.append(field)
     if payload.status is not None and payload.status != t.status:
+        from datetime import datetime, timezone
+
         valid = {s for s, _ in DevTask.STATUS_CHOICES}
         if payload.status not in valid:
             raise HttpError(400, f"Invalid status '{payload.status}'.")
         t.status = payload.status
         update_fields.append("status")
+        if payload.status == DevTask.STATUS_IN_PROGRESS and not t.started_at:
+            t.started_at = datetime.now(timezone.utc)
+            update_fields.append("started_at")
+        if payload.status == DevTask.STATUS_DONE:
+            t.completed_at = datetime.now(timezone.utc)
+            update_fields.append("completed_at")
         if (
             payload.status == DevTask.STATUS_DONE
             or payload.status == DevTask.STATUS_ABORTED
@@ -522,6 +592,9 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
         branch_name=t.branch_name,
         agent_log=t.agent_log,
         claude_prompt=t.claude_prompt,
+        total_cost=t.total_cost,
+        started_at=t.started_at,
+        completed_at=t.completed_at,
     )
 
 
@@ -635,6 +708,8 @@ def get_pm_messages(request, conversation_id: int):
             content=m.content,
             processing=m.processing,
             created_at=m.created_at,
+            token_cost=m.token_cost,
+            response_time_ms=m.response_time_ms,
             conversation_project_id=project_id,
         )
         for m in messages
@@ -666,6 +741,8 @@ def get_pm_message(request, message_id: int):
         content=msg.content,
         processing=msg.processing,
         created_at=msg.created_at,
+        token_cost=msg.token_cost,
+        response_time_ms=msg.response_time_ms,
         conversation_project_id=msg.conversation.project_id,
     )
 
@@ -693,6 +770,8 @@ def get_project_pm_conversation(request, project_id: int):
             content=m.content,
             processing=m.processing,
             created_at=m.created_at,
+            token_cost=m.token_cost,
+            response_time_ms=m.response_time_ms,
             conversation_project_id=project_id_val,
         )
         for m in messages
@@ -742,8 +821,11 @@ def _handle_pr_merged(payload: dict):
         logger.warning("Webhook: no task found for PR %s", pr_url)
         return {"ok": True}
 
+    from datetime import datetime, timezone
+
     task.status = DevTask.STATUS_DONE
-    task.save(update_fields=["status"])
+    task.completed_at = datetime.now(timezone.utc)
+    task.save(update_fields=["status", "completed_at"])
     logger.info("Task %s marked done via webhook (PR %s)", task.id, pr_url)
 
     from .tasks import cleanup_workspace_branch, project_manager_assign

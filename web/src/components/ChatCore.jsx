@@ -1,5 +1,6 @@
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { marked } from 'marked'
+import AgentCostSummary from './AgentCostSummary'
 
 const THEMES = {
   indigo: {
@@ -33,6 +34,19 @@ export default function ChatCore({
   const listRef = useRef(null)
   const inputRef = useRef(null)
   const t = THEMES[theme] || THEMES.violet
+
+  const stats = useMemo(() => {
+    let totalCost = 0
+    let totalTime = 0
+    let count = 0
+    for (const m of messages) {
+      if (m.role !== 'assistant') continue
+      if (m.token_cost != null) totalCost += Number(m.token_cost)
+      if (m.response_time_ms != null) totalTime += m.response_time_ms
+      if (m.token_cost != null || m.response_time_ms != null) count++
+    }
+    return count > 0 ? { totalCost, totalTime } : null
+  }, [messages])
 
   useEffect(() => {
     if (listRef.current) listRef.current.scrollTop = listRef.current.scrollHeight
@@ -75,33 +89,55 @@ export default function ChatCore({
       </div>
 
       {!readOnly && (
-        <div className="shrink-0 flex gap-3 p-4 border-t border-slate-100 bg-slate-50/60">
-          <textarea
-            ref={inputRef}
-            value={input}
-            onChange={e => setInput(e.target.value)}
-            onKeyDown={e => {
-              if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send() }
-            }}
-            placeholder={placeholder}
-            disabled={inputDisabled}
-            rows={3}
-            className={`flex-1 text-sm px-3.5 py-2.5 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 ${t.focusRing} placeholder:text-slate-400 bg-white transition-shadow disabled:opacity-50 disabled:cursor-not-allowed`}
-          />
-          <button
-            onClick={send}
-            disabled={sending || !input.trim() || inputDisabled}
-            className={`self-end px-5 py-2.5 text-white text-sm font-semibold rounded-xl transition-all hover:-translate-y-0.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none whitespace-nowrap ${t.sendBtn}`}
-          >
-            Send →
-          </button>
+        <div className="shrink-0 border-t border-slate-100 bg-slate-50/60">
+          <div className="flex gap-3 p-4">
+            <textarea
+              ref={inputRef}
+              value={input}
+              onChange={e => setInput(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); send() }
+              }}
+              placeholder={placeholder}
+              disabled={inputDisabled}
+              rows={3}
+              className={`flex-1 text-sm px-3.5 py-2.5 border border-slate-200 rounded-xl resize-none focus:outline-none focus:ring-2 ${t.focusRing} placeholder:text-slate-400 bg-white transition-shadow disabled:opacity-50 disabled:cursor-not-allowed`}
+            />
+            <button
+              onClick={send}
+              disabled={sending || !input.trim() || inputDisabled}
+              className={`self-end px-5 py-2.5 text-white text-sm font-semibold rounded-xl transition-all hover:-translate-y-0.5 shadow-md disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none whitespace-nowrap ${t.sendBtn}`}
+            >
+              Send →
+            </button>
+          </div>
+          {stats && (
+            <AgentCostSummary cost={stats.totalCost} timeMs={stats.totalTime} className="px-4 pb-3 -mt-1" />
+          )}
         </div>
+      )}
+
+      {readOnly && stats && (
+        <AgentCostSummary cost={stats.totalCost} timeMs={stats.totalTime} className="px-5 py-2.5 border-t border-slate-100" />
       )}
     </>
   )
 }
 
 function Bubble({ msg, theme }) {
+  const [showStats, setShowStats] = useState(false)
+  const bubbleRef = useRef(null)
+  const hasCost = msg.role === 'assistant' && !msg.processing && (msg.token_cost != null || msg.response_time_ms != null)
+
+  useEffect(() => {
+    if (!showStats) return
+    function onClickOutside(e) {
+      if (bubbleRef.current && !bubbleRef.current.contains(e.target)) setShowStats(false)
+    }
+    document.addEventListener('mousedown', onClickOutside)
+    return () => document.removeEventListener('mousedown', onClickOutside)
+  }, [showStats])
+
   if (msg.role === 'user') {
     return (
       <div className="flex justify-end animate-msg">
@@ -123,9 +159,18 @@ function Bubble({ msg, theme }) {
   return (
     <div className="flex justify-start animate-msg">
       <div
-        className="max-w-[82%] px-4 py-3 bg-white border border-slate-200 text-slate-800 text-sm rounded-2xl rounded-bl-sm shadow-sm md-prose leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: marked.parse(msg.content, { breaks: true, gfm: true }) }}
-      />
+        ref={bubbleRef}
+        className={`max-w-[82%] bg-white border border-slate-200 text-slate-800 text-sm rounded-2xl rounded-bl-sm shadow-sm md-prose leading-relaxed ${hasCost ? 'cursor-pointer' : ''}`}
+        onClick={() => hasCost && setShowStats(v => !v)}
+      >
+        <div
+          className="px-4 py-3"
+          dangerouslySetInnerHTML={{ __html: marked.parse(msg.content, { breaks: true, gfm: true }) }}
+        />
+        {showStats && (
+          <AgentCostSummary cost={msg.token_cost} timeMs={msg.response_time_ms} className="px-4 py-2 border-t border-slate-100 text-[11px]" />
+        )}
+      </div>
     </div>
   )
 }

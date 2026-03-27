@@ -1,4 +1,5 @@
 from datetime import datetime
+from decimal import Decimal
 from typing import Optional
 
 from ninja import Schema
@@ -19,6 +20,8 @@ class MessageSchema(Schema):
     content: str
     processing: bool
     created_at: datetime
+    token_cost: Optional[Decimal] = None
+    response_time_ms: Optional[int] = None
 
 
 class DevTaskSchema(Schema):
@@ -33,6 +36,9 @@ class DevTaskSchema(Schema):
     branch_name: str
     agent_log: str
     claude_prompt: str
+    total_cost: Optional[Decimal] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class UpdateTaskSchema(Schema):
@@ -86,6 +92,9 @@ class DashboardTaskSchema(Schema):
     pr_url: Optional[str]
     blocked_by: list[int]
     has_logs: bool
+    total_cost: Optional[Decimal] = None
+    started_at: Optional[datetime] = None
+    completed_at: Optional[datetime] = None
 
 
 class WorkspaceSchema(Schema):
@@ -110,6 +119,8 @@ class ProjectListSchema(Schema):
     created_at: datetime
     has_tech_spec: bool
     task_count: int
+    total_cost: Optional[Decimal] = None
+    total_agent_time_ms: Optional[int] = None
 
 
 class ProjectDetailSchema(Schema):
@@ -121,6 +132,8 @@ class ProjectDetailSchema(Schema):
     created_at: datetime
     updated_at: datetime
     tech_spec: Optional[TechSpecSchema]
+    total_cost: Optional[Decimal] = None
+    total_agent_time_ms: Optional[int] = None
 
 
 class PMMessageSchema(Schema):
@@ -129,8 +142,9 @@ class PMMessageSchema(Schema):
     content: str
     processing: bool
     created_at: datetime
-    # Populated when start_project was called during this PM conversation
-    conversation_project_id: Optional[int]
+    token_cost: Optional[Decimal] = None
+    response_time_ms: Optional[int] = None
+    conversation_project_id: Optional[int] = None
 
 
 class PMConversationSchema(Schema):

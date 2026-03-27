@@ -3,6 +3,7 @@ import ChatPanel from "./ChatPanel";
 import TechSpecPanel from "./TechSpecPanel";
 import TasksPanel from "./TasksPanel";
 import PMChatPanel from "./PMChatPanel";
+import ProjectAgentSummary from "./ProjectAgentSummary";
 import { STATUS_COLORS, STATUS_LABELS } from "../utils";
 import { api } from "../api";
 
@@ -53,6 +54,11 @@ export default function ProjectDetail({ project, onRefresh }) {
                   {project.github_repo_url.replace("https://github.com/", "")}
                 </a>
               )}
+              <ProjectAgentSummary
+                totalCost={project.total_cost}
+                totalAgentTimeMs={project.total_agent_time_ms}
+                className="mt-2.5"
+              />
             </div>
 
             <div className="flex flex-col items-end gap-2 shrink-0">

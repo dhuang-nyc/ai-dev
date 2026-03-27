@@ -1,7 +1,11 @@
 import json
 import logging
+import time
+from decimal import Decimal
 
 from anthropic import Anthropic
+
+from .utils.helpers import compute_cost
 
 logger = logging.getLogger(__name__)
 
@@ -171,7 +175,10 @@ TOOLS = [
 # Tool execution
 # ---------------------------------------------------------------------------
 
-def _execute_pm_tool(name: str, tool_input: dict, pm_conversation_id: int) -> tuple[str, dict | None]:
+
+def _execute_pm_tool(
+    name: str, tool_input: dict, pm_conversation_id: int
+) -> tuple[str, dict | None]:
     """
     Execute a PM tool. Returns (json_result_string, project_created_dict | None).
     project_created_dict is set when start_project fires successfully.
@@ -182,13 +189,24 @@ def _execute_pm_tool(name: str, tool_input: dict, pm_conversation_id: int) -> tu
 
     if name == "start_project":
         from team.models import (
-            Conversation, Message, PMConversation, Project,
+            Conversation,
+            Message,
+            PMConversation,
+            Project,
         )
         from team.tasks import process_chat_message
 
         pm_conv = PMConversation.objects.get(id=pm_conversation_id)
         if pm_conv.project_id:
-            return json.dumps({"error": "A project already exists for this conversation.", "project_id": pm_conv.project_id}), None
+            return (
+                json.dumps(
+                    {
+                        "error": "A project already exists for this conversation.",
+                        "project_id": pm_conv.project_id,
+                    }
+                ),
+                None,
+            )
 
         project = Project.objects.create(
             name=tool_input["project_name"],
@@ -197,7 +215,9 @@ def _execute_pm_tool(name: str, tool_input: dict, pm_conversation_id: int) -> tu
         )
 
         # Link PM conversation to the newly created project
-        PMConversation.objects.filter(id=pm_conversation_id).update(project=project)
+        PMConversation.objects.filter(id=pm_conversation_id).update(
+            project=project
+        )
 
         # Boot the Tech Lead conversation with the PM's start_prompt as the first user message
         conversation = Conversation.objects.create(project=project)
@@ -217,7 +237,9 @@ def _execute_pm_tool(name: str, tool_input: dict, pm_conversation_id: int) -> tu
 
         logger.info(
             "PM started project %d (%s) from PM conversation %d",
-            project.id, project.name, pm_conversation_id,
+            project.id,
+            project.name,
+            pm_conversation_id,
         )
 
         project_created = {
@@ -233,6 +255,7 @@ def _execute_pm_tool(name: str, tool_input: dict, pm_conversation_id: int) -> tu
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 def run_pm_with_history(
     pm_conversation_id: int,
     history: list[dict],
@@ -244,8 +267,10 @@ def run_pm_with_history(
     Returns:
         {
             "response": str,
-            "brief": dict | None,        # set when finalize_brief is called
-            "project_created": dict | None,  # {"project_id": int, "assistant_message_id": int}
+            "brief": dict | None,
+            "project_created": dict | None,
+            "token_cost": Decimal,
+            "response_time_ms": int,
         }
     """
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
@@ -254,6 +279,9 @@ def run_pm_with_history(
     brief_result = None
     project_created = None
     response = None
+    total_input_tokens = 0
+    total_output_tokens = 0
+    start = time.monotonic()
 
     while True:
         response = CLIENT.messages.create(
@@ -263,6 +291,9 @@ def run_pm_with_history(
             tools=TOOLS,
             messages=messages,
         )
+
+        total_input_tokens += response.usage.input_tokens
+        total_output_tokens += response.usage.output_tokens
 
         messages.append({"role": "assistant", "content": response.content})
 
@@ -275,24 +306,41 @@ def run_pm_with_history(
                 continue
 
             logger.info("PM calling tool: %s %s", block.name, block.input)
-            result_str, meta = _execute_pm_tool(block.name, block.input, pm_conversation_id)
+            result_str, meta = _execute_pm_tool(
+                block.name, block.input, pm_conversation_id
+            )
 
             if block.name == "finalize_brief":
                 brief_result = block.input
             elif block.name == "start_project" and meta:
                 project_created = meta
 
-            tool_results.append({
-                "type": "tool_result",
-                "tool_use_id": block.id,
-                "content": result_str,
-            })
+            tool_results.append(
+                {
+                    "type": "tool_result",
+                    "tool_use_id": block.id,
+                    "content": result_str,
+                }
+            )
 
         messages.append({"role": "user", "content": tool_results})
+
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+    cost = compute_cost(PM_MODEL, total_input_tokens, total_output_tokens)
+
+    logger.info(
+        "PM turn: %d input + %d output tokens, cost=$%s, %dms",
+        total_input_tokens,
+        total_output_tokens,
+        cost,
+        elapsed_ms,
+    )
 
     text_blocks = [b.text for b in response.content if b.type == "text"]
     return {
         "response": "\n".join(text_blocks),
         "brief": brief_result,
         "project_created": project_created,
+        "token_cost": cost,
+        "response_time_ms": elapsed_ms,
     }

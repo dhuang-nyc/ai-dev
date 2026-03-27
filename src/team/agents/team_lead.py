@@ -1,7 +1,10 @@
 import json
 import logging
+import time
 
 from anthropic import Anthropic
+
+from .utils.helpers import compute_cost
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +16,7 @@ MAX_TOKENS = 16000
 # ---------------------------------------------------------------------------
 # Dynamic system prompt — includes live project context
 # ---------------------------------------------------------------------------
+
 
 def _build_system_prompt(project) -> str:
     return f"""You are a senior Tech Lead embedded in an AI-powered developer team.
@@ -215,6 +219,7 @@ TOOLS = [
 # Tool execution — all DB access via lazy imports
 # ---------------------------------------------------------------------------
 
+
 def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
     from team.models import DevTask, Project, TechSpec
 
@@ -224,17 +229,19 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
             .prefetch_related("blocked_by")
             .order_by("order", "priority")
         )
-        return json.dumps([
-            {
-                "id": t.id,
-                "title": t.title,
-                "status": t.status,
-                "priority": t.priority,
-                "order": t.order,
-                "blocked_by": [b.id for b in t.blocked_by.all()],
-            }
-            for t in tasks
-        ])
+        return json.dumps(
+            [
+                {
+                    "id": t.id,
+                    "title": t.title,
+                    "status": t.status,
+                    "priority": t.priority,
+                    "order": t.order,
+                    "blocked_by": [b.id for b in t.blocked_by.all()],
+                }
+                for t in tasks
+            ]
+        )
 
     if name == "upsert_task":
         task_id = tool_input.get("task_id")
@@ -242,10 +249,14 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
             try:
                 task = DevTask.objects.get(id=task_id, project_id=project_id)
             except DevTask.DoesNotExist:
-                return json.dumps({"error": f"Task {task_id} not found in this project."})
+                return json.dumps(
+                    {"error": f"Task {task_id} not found in this project."}
+                )
             if task.status != DevTask.STATUS_PENDING:
                 return json.dumps(
-                    {"error": f"Cannot modify task {task_id} — status is '{task.status}'."}
+                    {
+                        "error": f"Cannot modify task {task_id} — status is '{task.status}'."
+                    }
                 )
             for field in ("title", "description", "claude_prompt", "priority"):
                 if field in tool_input:
@@ -266,15 +277,21 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
                 id__in=tool_input["blocked_by_ids"], project_id=project_id
             )
             task.blocked_by.set(blockers)
-        return json.dumps({"id": task.id, "title": task.title, "status": task.status})
+        return json.dumps(
+            {"id": task.id, "title": task.title, "status": task.status}
+        )
 
     if name == "abort_task":
         from .dev_agent import close_pull_request
 
         try:
-            task = DevTask.objects.get(id=tool_input["task_id"], project_id=project_id)
+            task = DevTask.objects.get(
+                id=tool_input["task_id"], project_id=project_id
+            )
         except DevTask.DoesNotExist:
-            return json.dumps({"error": f"Task {tool_input['task_id']} not found."})
+            return json.dumps(
+                {"error": f"Task {tool_input['task_id']} not found."}
+            )
         if task.status == DevTask.STATUS_DONE:
             return json.dumps({"error": "Cannot abort a completed task."})
         if task.status == DevTask.STATUS_ABORTED:
@@ -289,7 +306,9 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
 
         task.status = DevTask.STATUS_ABORTED
         task.save(update_fields=["status"])
-        return json.dumps({"id": task.id, "title": task.title, "status": task.status})
+        return json.dumps(
+            {"id": task.id, "title": task.title, "status": task.status}
+        )
 
     if name == "update_tech_spec":
         content = tool_input["content"]
@@ -299,7 +318,9 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
             spec.version += 1
             spec.save()
         except TechSpec.DoesNotExist:
-            TechSpec.objects.create(project_id=project_id, content=content, version=1)
+            TechSpec.objects.create(
+                project_id=project_id, content=content, version=1
+            )
         return json.dumps({"success": True})
 
     if name == "update_project_status":
@@ -308,6 +329,7 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
         github_error = None
         if status == "in_progress" and not project.github_repo_url:
             from ..github import upsert_github_repo
+
             try:
                 tech_spec_content = ""
                 try:
@@ -316,13 +338,19 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
                 except TechSpec.DoesNotExist:
                     pass
                 project.github_repo_url = upsert_github_repo(
-                    project.name, project.description, readme_content=tech_spec_content
+                    project.name,
+                    project.description,
+                    readme_content=tech_spec_content,
                 )
                 project.status = status
                 project.save(update_fields=["status", "github_repo_url"])
             except Exception as exc:
                 github_error = str(exc)
-                logger.warning("Could not upsert GitHub repo for project %s: %s", project_id, exc)
+                logger.warning(
+                    "Could not upsert GitHub repo for project %s: %s",
+                    project_id,
+                    exc,
+                )
                 Project.objects.filter(id=project_id).update(status=status)
         else:
             Project.objects.filter(id=project_id).update(status=status)
@@ -340,13 +368,20 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 def run_tech_lead_with_history(
     project_id: int, history: list[dict], new_user_message: str
-) -> str:
+) -> dict:
     """
     Run the agentic tech lead loop for one user turn.
     Executes tool calls against the DB in a loop until the model stops.
-    Returns the final plain-text response to store in the Message.
+
+    Returns:
+        {
+            "response": str,
+            "token_cost": Decimal,
+            "response_time_ms": int,
+        }
     """
     from team.models import Project
 
@@ -356,9 +391,12 @@ def run_tech_lead_with_history(
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
     messages.append({"role": "user", "content": new_user_message})
 
+    total_input_tokens = 0
+    total_output_tokens = 0
+    start = time.monotonic()
+
     response = None
     while True:
-        # Stream to avoid timeouts on large specs or long tool chains
         with CLIENT.messages.stream(
             model=TECH_LEAD_MODEL,
             max_tokens=MAX_TOKENS,
@@ -369,7 +407,9 @@ def run_tech_lead_with_history(
         ) as stream:
             response = stream.get_final_message()
 
-        # Append full content list — preserves thinking + tool_use blocks for next turn
+        total_input_tokens += response.usage.input_tokens
+        total_output_tokens += response.usage.output_tokens
+
         messages.append({"role": "assistant", "content": response.content})
 
         if response.stop_reason != "tool_use":
@@ -378,22 +418,43 @@ def run_tech_lead_with_history(
         tool_results = []
         for block in response.content:
             if block.type == "tool_use":
-                logger.info("Tech lead calling tool: %s %s", block.name, block.input)
+                logger.info(
+                    "Tech lead calling tool: %s %s", block.name, block.input
+                )
                 try:
                     result = _execute_tool(block.name, block.input, project_id)
                 except Exception as exc:
                     logger.exception("Tool %s raised an exception", block.name)
                     result = json.dumps({"error": str(exc)})
-                tool_results.append({
-                    "type": "tool_result",
-                    "tool_use_id": block.id,
-                    "content": result,
-                })
+                tool_results.append(
+                    {
+                        "type": "tool_result",
+                        "tool_use_id": block.id,
+                        "content": result,
+                    }
+                )
 
         messages.append({"role": "user", "content": tool_results})
 
+    elapsed_ms = int((time.monotonic() - start) * 1000)
+    cost = compute_cost(
+        TECH_LEAD_MODEL, total_input_tokens, total_output_tokens
+    )
+
+    logger.info(
+        "Tech lead turn: %d input + %d output tokens, cost=$%s, %dms",
+        total_input_tokens,
+        total_output_tokens,
+        cost,
+        elapsed_ms,
+    )
+
     text_blocks = [b.text for b in response.content if b.type == "text"]
-    return "\n".join(text_blocks)
+    return {
+        "response": "\n".join(text_blocks),
+        "token_cost": cost,
+        "response_time_ms": elapsed_ms,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -458,7 +519,9 @@ def extract_tasks(tech_spec: str) -> list[dict]:
         messages=[
             {
                 "role": "user",
-                "content": TASK_EXTRACTION_PROMPT.format(spec_content=tech_spec),
+                "content": TASK_EXTRACTION_PROMPT.format(
+                    spec_content=tech_spec
+                ),
             }
         ],
     )

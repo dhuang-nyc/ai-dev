@@ -46,12 +46,14 @@ def process_chat_message(self, project_id: int, assistant_message_id: int):
         ]
         new_user_message = all_messages[-1].content
 
-        response_text = run_tech_lead_with_history(
+        result = run_tech_lead_with_history(
             project_id, history, new_user_message
         )
 
-        assistant_msg.content = response_text
+        assistant_msg.content = result["response"]
         assistant_msg.processing = False
+        assistant_msg.token_cost = result.get("token_cost")
+        assistant_msg.response_time_ms = result.get("response_time_ms")
         assistant_msg.save()
 
         if project.status == Project.STATUS_DRAFT:
@@ -163,7 +165,9 @@ def run_dev_task(task_id: int):
 
         task.branch_name = branch
         task.status = DevTask.STATUS_IN_PROGRESS
-        task.save(update_fields=["branch_name", "status"])
+        if not task.started_at:
+            task.started_at = datetime.now(timezone.utc)
+        task.save(update_fields=["branch_name", "status", "started_at"])
 
         _log(task, "Setting up workspace")
         repo_path = setup_workspace(workspace.name, repo_url, repo_name)
@@ -371,6 +375,8 @@ def process_pm_message(self, pm_conversation_id: int, assistant_message_id: int)
 
         assistant_msg.content = result["response"]
         assistant_msg.processing = False
+        assistant_msg.token_cost = result.get("token_cost")
+        assistant_msg.response_time_ms = result.get("response_time_ms")
         assistant_msg.save()
 
     except Exception as exc:

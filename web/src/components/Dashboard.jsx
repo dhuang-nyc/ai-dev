@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { api } from "../api";
 import { STATUS_COLORS, STATUS_LABELS } from "../utils";
 import TaskTable from "./TaskTable";
+import ProjectAgentSummary from "./ProjectAgentSummary";
 
 export default function Dashboard({ projects, onNewProject, onIterateIdea, onSelectProject }) {
   const [tasks, setTasks] = useState([]);
@@ -297,6 +298,12 @@ function ProjectCard({ project, onClick }) {
         {project.task_count > 0 && project.has_tech_spec && <span>·</span>}
         {project.has_tech_spec && <span className="text-violet-400">spec</span>}
       </div>
+
+      <ProjectAgentSummary
+        totalCost={project.total_cost}
+        totalAgentTimeMs={project.total_agent_time_ms}
+        className="mt-2 pt-2 border-t border-slate-100"
+      />
     </button>
   );
 }
