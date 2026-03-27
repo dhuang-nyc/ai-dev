@@ -1,11 +1,7 @@
 import { useState, useEffect } from 'react'
-import { marked } from 'marked'
 import { api } from '../api'
+import ChatCore from './ChatCore'
 
-/**
- * Read-only view of the PM discovery conversation for a project page.
- * Only rendered when the project has a PM conversation.
- */
 export default function PMChatPanel({ projectId }) {
   const [messages, setMessages] = useState([])
   const [loading, setLoading] = useState(true)
@@ -13,10 +9,7 @@ export default function PMChatPanel({ projectId }) {
 
   useEffect(() => {
     api.getProjectPMConversation(projectId)
-      .then(msgs => {
-        setMessages(msgs)
-        setLoading(false)
-      })
+      .then(msgs => { setMessages(msgs); setLoading(false) })
       .catch(() => setLoading(false))
   }, [projectId])
 
@@ -24,7 +17,6 @@ export default function PMChatPanel({ projectId }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-      {/* Collapsible header */}
       <button
         onClick={() => setOpen(v => !v)}
         className="w-full flex items-center justify-between px-5 py-3.5 border-b border-slate-100 bg-slate-50/80 hover:bg-slate-100/60 transition-colors"
@@ -38,32 +30,13 @@ export default function PMChatPanel({ projectId }) {
       </button>
 
       {open && (
-        <div className="flex flex-col gap-3 p-5 max-h-[480px] overflow-y-auto custom-scroll bg-slate-50/30">
-          {messages.map(msg => (
-            <PMBubble key={msg.id} msg={msg} />
-          ))}
-        </div>
+        <ChatCore
+          messages={messages}
+          theme="violet"
+          readOnly
+          maxHeight="480px"
+        />
       )}
-    </div>
-  )
-}
-
-function PMBubble({ msg }) {
-  if (msg.role === 'user') {
-    return (
-      <div className="flex justify-end">
-        <div className="max-w-[78%] px-4 py-2.5 bg-gradient-to-br from-violet-500 to-violet-600 text-white text-sm rounded-2xl rounded-br-sm shadow-sm shadow-violet-200 whitespace-pre-wrap leading-relaxed">
-          {msg.content}
-        </div>
-      </div>
-    )
-  }
-  return (
-    <div className="flex justify-start">
-      <div
-        className="max-w-[82%] px-4 py-3 bg-white border border-slate-200 text-slate-800 text-sm rounded-2xl rounded-bl-sm shadow-sm md-prose leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: marked.parse(msg.content, { breaks: true, gfm: true }) }}
-      />
     </div>
   )
 }
