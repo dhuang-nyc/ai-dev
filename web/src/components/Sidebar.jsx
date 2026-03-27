@@ -8,9 +8,17 @@ export default function Sidebar({
   onLogout,
   isOpen,
   onClose,
+  pmPage,
+  onShowPMList,
+  onNewIdea,
 }) {
   function handleSelect(id) {
     onSelect(id);
+    onClose?.();
+  }
+
+  function handleShowPMList() {
+    onShowPMList?.();
     onClose?.();
   }
 
@@ -40,6 +48,35 @@ export default function Sidebar({
             ✕
           </button>
         </div>
+      </div>
+
+      {/* PM Ideas nav */}
+      <div className="px-2 pt-3 pb-1 border-b border-slate-700/60">
+        <p className="text-xs font-semibold text-slate-500 uppercase tracking-widest px-3 mb-1.5">
+          PM Ideas
+        </p>
+        <button
+          onClick={handleShowPMList}
+          className={`w-full text-left px-3 py-2 rounded-lg text-sm font-medium transition-colors border ${
+            pmPage !== null
+              ? 'bg-violet-500/20 border-violet-500/40 text-white'
+              : 'text-slate-400 hover:text-white hover:bg-slate-800/80 border-transparent'
+          }`}
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-violet-400">✦</span>
+            All Conversations
+          </span>
+        </button>
+        <button
+          onClick={() => { onNewIdea?.(); onClose?.(); }}
+          className="w-full text-left px-3 py-2 rounded-lg text-sm font-medium text-slate-400 hover:text-white hover:bg-slate-800/80 border border-transparent transition-colors"
+        >
+          <span className="flex items-center gap-2">
+            <span className="text-violet-400">+</span>
+            New Idea
+          </span>
+        </button>
       </div>
 
       {/* Project list */}

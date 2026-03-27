@@ -3,6 +3,8 @@ import Sidebar from "./components/Sidebar";
 import ProjectDetail from "./components/ProjectDetail";
 import NewProjectModal from "./components/NewProjectModal";
 import PMChatModal from "./components/PMChatModal";
+import PMConversationsPage from "./components/PMConversationsPage";
+import PMConversationChat from "./components/PMConversationChat";
 import LoginPage from "./components/LoginPage";
 import { api } from "./api";
 import Dashboard from "./components/Dashboard";
@@ -18,6 +20,8 @@ export default function App() {
   const [showNewModal, setShowNewModal] = useState(false);
   const [showPMModal, setShowPMModal] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  // pmPage: null = not in PM section, 'list' = show PM list, number = show specific PM conv chat
+  const [pmPage, setPmPage] = useState(null);
 
   useEffect(() => {
     api
@@ -75,6 +79,12 @@ export default function App() {
     setShowNewModal(false);
     fetchProjects();
     setSelectedId(projectId);
+    setPmPage(null);
+  }
+
+  function handleSelectProject(projectId) {
+    setSelectedId(projectId);
+    setPmPage(null);
   }
 
   async function handleLogout() {
@@ -113,12 +123,15 @@ export default function App() {
 
       <Sidebar
         projects={projects}
-        selectedId={selectedId}
-        onSelect={setSelectedId}
+        selectedId={pmPage === null ? selectedId : null}
+        onSelect={(id) => { setSelectedId(id); setPmPage(null); }}
         onNewProject={() => setShowNewModal(true)}
         onLogout={handleLogout}
         isOpen={sidebarOpen}
         onClose={() => setSidebarOpen(false)}
+        pmPage={pmPage}
+        onShowPMList={() => { setPmPage('list'); setSelectedId(null); }}
+        onNewIdea={() => setShowPMModal(true)}
       />
 
       <main className="flex-1 overflow-y-auto">
@@ -133,7 +146,23 @@ export default function App() {
           <span className="font-bold text-sm text-slate-900">{APP_NAME}</span>
         </div>
 
-        {loadingProject ? (
+        {pmPage === 'list' ? (
+          <PMConversationsPage
+            onSelectConv={(id) => setPmPage(id)}
+            onNewConv={() => setShowPMModal(true)}
+            onSelectProject={handleSelectProject}
+          />
+        ) : typeof pmPage === 'number' ? (
+          <PMConversationChat
+            key={pmPage}
+            conversationId={pmPage}
+            onBack={() => setPmPage('list')}
+            onProjectCreated={(projectId) => {
+              fetchProjects();
+              handleSelectProject(projectId);
+            }}
+          />
+        ) : loadingProject ? (
           <div className="flex items-center justify-center h-full">
             <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
           </div>
@@ -166,7 +195,7 @@ export default function App() {
           onProjectCreated={(projectId) => {
             setShowPMModal(false);
             fetchProjects();
-            setSelectedId(projectId);
+            handleSelectProject(projectId);
           }}
         />
       )}

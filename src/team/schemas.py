@@ -139,6 +139,15 @@ class PMConversationSchema(Schema):
     created_at: datetime
 
 
+class PMConversationListItemSchema(Schema):
+    id: int
+    project_id: Optional[int]
+    project_name: Optional[str]
+    message_count: int
+    created_at: datetime
+    preview: Optional[str]  # first user message, truncated
+
+
 class PMChatResponseSchema(Schema):
     user_message_id: int
     assistant_message_id: int

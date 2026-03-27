@@ -1,0 +1,45 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  <li>
+    <button type="button" class="addlink" id="btn-new-pm-convo"
+            style="background:none;border:none;cursor:pointer;font-size:inherit;padding:0;">
+      New PM Conversation
+    </button>
+  </li>
+{% endblock %}
+
+{% block footer %}
+{{ block.super }}
+<script>
+(function () {
+  document.getElementById('btn-new-pm-convo').addEventListener('click', async function () {
+    const btn = this;
+    btn.disabled = true;
+    btn.textContent = 'Creating\u2026';
+
+    try {
+      const res = await fetch('/api/pm/conversations/', {
+        method: 'POST',
+        headers: { 'X-CSRFToken': getCookie('csrftoken') },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      window.location.href = `/admin/team/pmconversation/${data.id}/chat/`;
+    } catch (err) {
+      alert(`Error: ${err.message}`);
+      btn.disabled = false;
+      btn.textContent = 'New PM Conversation';
+    }
+  });
+
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return '';
+  }
+})();
+</script>
+{% endblock %}

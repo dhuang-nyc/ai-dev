@@ -48,9 +48,12 @@ export const api = {
   markStatus:     (id, status)   => req('POST', `/projects/${id}/mark-status/?status=${status}`),
   runDevAgents:   ()             => req('POST', '/dev-agent/run/'),
   // PM
+  listPMConversations:    ()             => req('GET',  '/pm/conversations/'),
+  getPMConversation:      (id)           => req('GET',  `/pm/conversations/${id}/`),
   createPMConversation:   ()             => req('POST', '/pm/conversations/'),
   sendPMMessage:          (id, content)  => req('POST', `/pm/conversations/${id}/chat/`, { content }),
   getPMMessages:          (id)           => req('GET',  `/pm/conversations/${id}/messages/`),
   getPMMessage:           (id)           => req('GET',  `/pm/messages/${id}/`),
   getProjectPMConversation: (id)         => req('GET',  `/projects/${id}/pm-conversation/`),
+  deletePMConversation:     (id)           => req('DELETE', `/pm/conversations/${id}/`),
 }

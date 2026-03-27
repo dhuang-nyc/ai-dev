@@ -31,6 +31,7 @@ class Project(BaseModel):
         max_length=20, choices=STATUS_CHOICES, default=STATUS_DRAFT
     )
     github_repo_url = models.URLField(max_length=500, blank=True, null=True)
+    live_url = models.URLField(max_length=500, blank=True, null=True)
 
     def __str__(self):
         return self.name

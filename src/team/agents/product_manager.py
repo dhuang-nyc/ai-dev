@@ -186,6 +186,10 @@ def _execute_pm_tool(name: str, tool_input: dict, pm_conversation_id: int) -> tu
         )
         from team.tasks import process_chat_message
 
+        pm_conv = PMConversation.objects.get(id=pm_conversation_id)
+        if pm_conv.project_id:
+            return json.dumps({"error": "A project already exists for this conversation.", "project_id": pm_conv.project_id}), None
+
         project = Project.objects.create(
             name=tool_input["project_name"],
             description=tool_input["project_description"],

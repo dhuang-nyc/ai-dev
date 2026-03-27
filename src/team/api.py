@@ -9,7 +9,14 @@ from ninja.security import django_auth
 
 logger = logging.getLogger(__name__)
 
-from .models import Conversation, DevTask, Message, PMConversation, PMMessage, Project
+from .models import (
+    Conversation,
+    DevTask,
+    Message,
+    PMConversation,
+    PMMessage,
+    Project,
+)
 from .schemas import (
     ApproveResponseSchema,
     ChatRequestSchema,
@@ -20,6 +27,7 @@ from .schemas import (
     DevTaskSchema,
     MessageSchema,
     PMChatResponseSchema,
+    PMConversationListItemSchema,
     PMConversationSchema,
     PMMessageSchema,
     ProjectDetailSchema,
@@ -48,15 +56,22 @@ class AuthUserSchema(Schema):
 @api.get("/auth/me/", auth=None, response=AuthUserSchema)
 def auth_me(request):
     from django.middleware.csrf import get_token
-    get_token(request)  # ensures CSRF cookie is set for subsequent POST requests
+
+    get_token(
+        request
+    )  # ensures CSRF cookie is set for subsequent POST requests
     if request.user.is_authenticated:
-        return AuthUserSchema(username=request.user.username, authenticated=True)
+        return AuthUserSchema(
+            username=request.user.username, authenticated=True
+        )
     return AuthUserSchema(username=None, authenticated=False)
 
 
 @api.post("/auth/login/", auth=None, response=AuthUserSchema)
 def auth_login(request, payload: LoginSchema):
-    user = authenticate(request, username=payload.username, password=payload.password)
+    user = authenticate(
+        request, username=payload.username, password=payload.password
+    )
     if user is None:
         raise HttpError(401, "Invalid credentials")
     django_login(request, user)
@@ -514,6 +529,52 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
 # PM Conversation endpoints
 # ---------------------------------------------------------------------------
 
+
+@api.get("/pm/conversations/", response=list[PMConversationListItemSchema])
+def list_pm_conversations(request):
+    from django.db.models import Count
+
+    convs = (
+        PMConversation.objects.select_related("project")
+        .annotate(msg_count=Count("messages"))
+        .order_by("-created_at")
+    )
+    result = []
+    for c in convs:
+        first_msg = (
+            c.messages.filter(role=PMMessage.ROLE_USER)
+            .order_by("created_at")
+            .first()
+        )
+        preview = None
+        if first_msg:
+            preview = first_msg.content[:120] + (
+                "\u2026" if len(first_msg.content) > 120 else ""
+            )
+        result.append(
+            PMConversationListItemSchema(
+                id=c.id,
+                project_id=c.project_id,
+                project_name=c.project.name if c.project_id else None,
+                message_count=c.msg_count,
+                created_at=c.created_at,
+                preview=preview,
+            )
+        )
+    return result
+
+
+@api.get("/pm/conversations/{conversation_id}/", response=PMConversationSchema)
+def get_pm_conversation(request, conversation_id: int):
+    try:
+        conv = PMConversation.objects.get(id=conversation_id)
+    except PMConversation.DoesNotExist:
+        raise HttpError(404, "PM conversation not found")
+    return PMConversationSchema(
+        id=conv.id, project_id=conv.project_id, created_at=conv.created_at
+    )
+
+
 @api.post("/pm/conversations/", response=PMConversationSchema)
 def create_pm_conversation(request):
     conversation = PMConversation.objects.create()
@@ -524,7 +585,9 @@ def create_pm_conversation(request):
     )
 
 
-@api.post("/pm/conversations/{conversation_id}/chat/", response=PMChatResponseSchema)
+@api.post(
+    "/pm/conversations/{conversation_id}/chat/", response=PMChatResponseSchema
+)
 def pm_chat(request, conversation_id: int, payload: ChatRequestSchema):
     try:
         conversation = PMConversation.objects.get(id=conversation_id)
@@ -553,7 +616,10 @@ def pm_chat(request, conversation_id: int, payload: ChatRequestSchema):
     )
 
 
-@api.get("/pm/conversations/{conversation_id}/messages/", response=list[PMMessageSchema])
+@api.get(
+    "/pm/conversations/{conversation_id}/messages/",
+    response=list[PMMessageSchema],
+)
 def get_pm_messages(request, conversation_id: int):
     try:
         conversation = PMConversation.objects.get(id=conversation_id)
@@ -575,10 +641,22 @@ def get_pm_messages(request, conversation_id: int):
     ]
 
 
+@api.delete("/pm/conversations/{conversation_id}/", response=str)
+def delete_pm_conversation(request, conversation_id: int):
+    try:
+        conversation = PMConversation.objects.get(id=conversation_id)
+    except PMConversation.DoesNotExist:
+        raise HttpError(404, "PM conversation not found")
+    conversation.delete()
+    return "PM conversation deleted"
+
+
 @api.get("/pm/messages/{message_id}/", response=PMMessageSchema)
 def get_pm_message(request, message_id: int):
     try:
-        msg = PMMessage.objects.select_related("conversation").get(id=message_id)
+        msg = PMMessage.objects.select_related("conversation").get(
+            id=message_id
+        )
     except PMMessage.DoesNotExist:
         raise HttpError(404, "PM message not found")
 
@@ -592,7 +670,9 @@ def get_pm_message(request, message_id: int):
     )
 
 
-@api.get("/projects/{project_id}/pm-conversation/", response=list[PMMessageSchema])
+@api.get(
+    "/projects/{project_id}/pm-conversation/", response=list[PMMessageSchema]
+)
 def get_project_pm_conversation(request, project_id: int):
     try:
         project = Project.objects.get(id=project_id)
