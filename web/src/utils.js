@@ -32,5 +32,4 @@ export const TASK_STATUS_LABELS = {
   aborted:     'Aborted',
 }
 
-export const LOGO_URL = "https://static.vecteezy.com/system/resources/previews/024/649/104/non_2x/cartoon-capybara-cute-capybara-face-icon-vector.jpg";
 export const APP_NAME = "Capy AI";
