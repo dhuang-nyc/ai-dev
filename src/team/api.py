@@ -235,6 +235,8 @@ def get_project(request, project_id: int):
         tech_spec=tech_spec,
         total_cost=cost,
         total_agent_time_ms=time_ms,
+        has_pm_chat=PMConversation.objects.filter(project=project).exists(),
+        has_tasks=DevTask.objects.filter(project=project).exists(),
     )
 
 
@@ -596,6 +598,21 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
         started_at=t.started_at,
         completed_at=t.completed_at,
     )
+
+
+@api.delete("/tasks/{task_id}/", response=str)
+def delete_task(request, task_id: int):
+    try:
+        t = DevTask.objects.get(id=task_id)
+    except DevTask.DoesNotExist:
+        raise HttpError(404, "Task not found")
+    if t.status not in (DevTask.STATUS_PENDING, DevTask.STATUS_ABORTED):
+        raise HttpError(
+            400,
+            f"Cannot delete task with status '{t.status}'. Only pending or aborted tasks can be deleted.",
+        )
+    t.delete()
+    return "ok"
 
 
 # ---------------------------------------------------------------------------

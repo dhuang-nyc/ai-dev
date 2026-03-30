@@ -134,6 +134,8 @@ class ProjectDetailSchema(Schema):
     tech_spec: Optional[TechSpecSchema]
     total_cost: Optional[Decimal] = None
     total_agent_time_ms: Optional[int] = None
+    has_pm_chat: bool
+    has_tasks: bool
 
 
 class PMMessageSchema(Schema):

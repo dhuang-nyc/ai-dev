@@ -41,6 +41,7 @@ export const api = {
   getTasks:       (id)           => req('GET',  `/projects/${id}/tasks/`),
   getTask:        (id)           => req('GET',  `/tasks/${id}/`),
   updateTask:     (id, data)     => req('PATCH', `/tasks/${id}/`, data),
+  deleteTask:     (id)           => req('DELETE', `/tasks/${id}/`),
   sendMessage:    (id, content)  => req('POST', `/projects/${id}/chat/`, { content }),
   createFromIdea: (idea)         => req('POST', '/projects/create-from-idea/', { idea }),
   approveProject: (id)           => req('POST', `/projects/${id}/approve/`),

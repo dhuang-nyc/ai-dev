@@ -4,6 +4,7 @@ import { STATUS_COLORS, STATUS_LABELS } from "../utils";
 import TaskTable from "./TaskTable";
 import ProjectAgentSummary from "./ProjectAgentSummary";
 
+
 export default function Dashboard({ projects, onNewProject, onIterateIdea, onSelectProject }) {
   const [tasks, setTasks] = useState([]);
   const [workspaces, setWorkspaces] = useState([]);
@@ -204,27 +205,12 @@ export default function Dashboard({ projects, onNewProject, onIterateIdea, onSel
             </button>
           </div>
         </div>
-        <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
-          {loadingTasks ? (
-            <div className="flex justify-center py-10">
-              <div className="w-6 h-6 border-2 border-indigo-400 border-t-transparent rounded-full animate-spin" />
-            </div>
-          ) : tasks.length === 0 ? (
-            <p className="text-center text-slate-400 text-sm py-10">
-              No tasks currently in progress.
-            </p>
-          ) : (
-            <TaskTable
-              tasks={tasks}
-              onSelectProject={onSelectProject}
-              onTaskSaved={(updated) =>
-                setTasks((prev) =>
-                  prev.map((t) => (t.id === updated.id ? { ...t, ...updated } : t))
-                )
-              }
-            />
-          )}
-        </div>
+        <TaskTable
+          tasks={tasks}
+          loading={loadingTasks}
+          onSelectProject={onSelectProject}
+          onTasksChange={setTasks}
+        />
       </section>
 
       {/* Empty state */}

@@ -3,10 +3,11 @@ import { createPortal } from "react-dom";
 import { api } from "../api";
 import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from "../utils";
 
-export default function TaskModal({ taskId, onClose, onSaved }) {
+export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
   const [task, setTask]       = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving]   = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError]     = useState(null);
   const [dirty, setDirty]     = useState(false);
 
@@ -64,6 +65,22 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
       setSaving(false);
     }
   }
+
+  async function handleDelete() {
+    if (!window.confirm(`Delete task "${task.title}"?`)) return;
+    setDeleting(true);
+    setError(null);
+    try {
+      await api.deleteTask(taskId);
+      onDeleted?.(taskId);
+    } catch (e) {
+      setError(e.message);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
+  const deletable = task && (task.status === "pending" || task.status === "aborted");
 
   return createPortal(
     <div
@@ -190,11 +207,22 @@ export default function TaskModal({ taskId, onClose, onSaved }) {
         {/* Footer */}
         {!loading && task && (
           <div className="flex items-center justify-between px-6 py-4 border-t border-slate-100 shrink-0">
-            <div className="text-xs text-slate-400">
-              {!editable && (
-                <span className="italic">Fields locked — status only is editable</span>
+            <div className="flex items-center gap-2">
+              {deletable && onDeleted && (
+                <button
+                  onClick={handleDelete}
+                  disabled={deleting}
+                  className="px-4 py-1.5 text-sm font-semibold text-red-600 hover:bg-red-50 rounded-lg transition-colors disabled:opacity-40"
+                >
+                  {deleting ? "Deleting…" : "Delete"}
+                </button>
               )}
-              {error && <span className="text-red-500">{error}</span>}
+              <span className="text-xs text-slate-400">
+                {!editable && !deletable && (
+                  <span className="italic">Fields locked — status only is editable</span>
+                )}
+                {error && <span className="text-red-500">{error}</span>}
+              </span>
             </div>
             <div className="flex items-center gap-2">
               <button

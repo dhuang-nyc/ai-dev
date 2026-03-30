@@ -28,115 +28,133 @@ export default function ProjectDetail({ project, onRefresh }) {
   }
 
   return (
-    <div className="w-full animate-fadein px-4 py-8 sm:px-12 sm:py-24 flex flex-col gap-8">
-      {/* Project header */}
-      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
-        <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-500" />
-        <div className="px-6 py-5">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div className="min-w-0">
-              <h1 className="text-xl font-bold text-slate-900 truncate">
-                {project.name}
-              </h1>
-              {project.description && (
-                <p className="text-sm text-slate-500 mt-1 line-clamp-2">
-                  {project.description}
-                </p>
-              )}
-              {project.github_repo_url && (
-                <a
-                  href={project.github_repo_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="inline-flex items-center gap-1.5 text-xs text-indigo-500 hover:text-indigo-700 mt-2 transition-colors"
-                >
-                  🔗{" "}
-                  {project.github_repo_url.replace("https://github.com/", "")}
-                </a>
-              )}
-              <ProjectAgentSummary
-                totalCost={project.total_cost}
-                totalAgentTimeMs={project.total_agent_time_ms}
-                className="mt-2.5"
-              />
-            </div>
-
-            <div className="flex flex-col items-end gap-2 shrink-0">
-              <StatusBadge status={project.status} />
-              {!isTerminal && (
-                <div className="flex items-center gap-2 flex-wrap justify-end">
-                  {project.status === "planning" && (
-                    <Btn
-                      onClick={() =>
-                        doAction(() => api.approveProject(project.id))
-                      }
-                      loading={actionLoading}
-                      color="emerald"
-                    >
-                      ✓ Approve &amp; Generate Tasks
-                    </Btn>
-                  )}
-                  {project.status === "approved" && (
-                    <Btn
-                      onClick={() =>
-                        doAction(() => api.startProject(project.id))
-                      }
-                      loading={actionLoading}
-                      color="indigo"
-                    >
-                      ▶ Start Project
-                    </Btn>
-                  )}
-                  {project.status === "in_progress" && (
-                    <Btn
-                      onClick={() => {
-                        if (confirm("Mark project as completed?"))
-                          doAction(() =>
-                            api.markStatus(project.id, "completed"),
-                          );
-                      }}
-                      loading={actionLoading}
-                      color="emerald"
-                    >
-                      ✓ Complete
-                    </Btn>
-                  )}
-                  <Btn
-                    onClick={() => {
-                      if (confirm("Abort this project?"))
-                        doAction(() => api.markStatus(project.id, "aborted"));
-                    }}
-                    loading={actionLoading}
-                    color="red"
-                  >
-                    ✕ Abort
-                  </Btn>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {actionError && (
-            <p className="text-red-500 text-xs mt-3 bg-red-50 px-3 py-2 rounded-lg">
-              {actionError}
-            </p>
-          )}
-        </div>
-      </div>
-
+    <div className="w-full animate-fadein px-4 py-8 sm:px-12 sm:py-24 flex flex-col gap-8 h-full overflow-y-auto">
       {/* Section nav */}
-      <div className="sticky top-4 z-10 flex items-center gap-2 flex-wrap bg-white/80 backdrop-blur border border-slate-200 rounded-xl shadow-sm px-4 py-2.5">
-        <span className="text-xs text-slate-400 font-medium mr-1">Jump to:</span>
+      <div className="sticky top-0 sm:top-4 z-10 -mx-4 sm:mx-0 flex items-center gap-2 flex-wrap bg-white/80 backdrop-blur border-y sm:border border-slate-200 sm:rounded-xl shadow-sm px-4 py-2.5">
+        <span className="text-xs text-slate-400 font-medium mr-1">
+          Jump to:
+        </span>
+        <NavBtn href="#project-header">Overview</NavBtn>
         <NavBtn href="#chat">Chat</NavBtn>
         {project.tech_spec && <NavBtn href="#tech-spec">Tech Spec</NavBtn>}
-        <NavBtn href="#tasks">Tasks</NavBtn>
-        <NavBtn href="#pm-chat">PM Chat</NavBtn>
+        {project.has_tasks && <NavBtn href="#tasks">Tasks</NavBtn>}
+        {project.has_pm_chat && <NavBtn href="#pm-chat">PM Chat</NavBtn>}
       </div>
 
-      <div id="chat"><ChatPanel projectId={project.id} /></div>
-      {project.tech_spec && <div id="tech-spec"><TechSpecPanel techSpec={project.tech_spec} /></div>}
-      <div id="tasks"><TasksPanel projectId={project.id} /></div>
-      <div id="pm-chat"><PMChatPanel projectId={project.id} /></div>
+      <div className="flex flex-col gap-8">
+        {/* Project header */}
+        <div
+          id="project-header"
+          className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"
+        >
+          <div className="h-1 bg-gradient-to-r from-indigo-500 to-violet-500" />
+          <div className="px-6 py-5">
+            <div className="flex items-start justify-between gap-4 flex-wrap">
+              <div className="min-w-0">
+                <h1 className="text-xl font-bold text-slate-900 truncate">
+                  {project.name}
+                </h1>
+                {project.description && (
+                  <p className="text-sm text-slate-500 mt-1 line-clamp-2">
+                    {project.description}
+                  </p>
+                )}
+                {project.github_repo_url && (
+                  <a
+                    href={project.github_repo_url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1.5 text-xs text-indigo-500 hover:text-indigo-700 mt-2 transition-colors"
+                  >
+                    🔗{" "}
+                    {project.github_repo_url.replace("https://github.com/", "")}
+                  </a>
+                )}
+                <ProjectAgentSummary
+                  totalCost={project.total_cost}
+                  totalAgentTimeMs={project.total_agent_time_ms}
+                  className="mt-2.5"
+                />
+              </div>
+
+              <div className="flex flex-col items-end gap-2 shrink-0">
+                <StatusBadge status={project.status} />
+                {!isTerminal && (
+                  <div className="flex items-center gap-2 flex-wrap justify-end">
+                    {project.status === "planning" && (
+                      <Btn
+                        onClick={() =>
+                          doAction(() => api.approveProject(project.id))
+                        }
+                        loading={actionLoading}
+                        color="emerald"
+                      >
+                        ✓ Approve &amp; Generate Tasks
+                      </Btn>
+                    )}
+                    {project.status === "approved" && (
+                      <Btn
+                        onClick={() =>
+                          doAction(() => api.startProject(project.id))
+                        }
+                        loading={actionLoading}
+                        color="indigo"
+                      >
+                        ▶ Start Project
+                      </Btn>
+                    )}
+                    {project.status === "in_progress" && (
+                      <Btn
+                        onClick={() => {
+                          if (confirm("Mark project as completed?"))
+                            doAction(() =>
+                              api.markStatus(project.id, "completed"),
+                            );
+                        }}
+                        loading={actionLoading}
+                        color="emerald"
+                      >
+                        ✓ Complete
+                      </Btn>
+                    )}
+                    <Btn
+                      onClick={() => {
+                        if (confirm("Abort this project?"))
+                          doAction(() => api.markStatus(project.id, "aborted"));
+                      }}
+                      loading={actionLoading}
+                      color="red"
+                    >
+                      ✕ Abort
+                    </Btn>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {actionError && (
+              <p className="text-red-500 text-xs mt-3 bg-red-50 px-3 py-2 rounded-lg">
+                {actionError}
+              </p>
+            )}
+          </div>
+        </div>
+
+        <div id="chat">
+          <ChatPanel projectId={project.id} />
+        </div>
+        {project.tech_spec && (
+          <div id="tech-spec">
+            <TechSpecPanel techSpec={project.tech_spec} />
+          </div>
+        )}
+        <div id="tasks">
+          <TasksPanel projectId={project.id} />
+        </div>
+        <div id="pm-chat">
+          <PMChatPanel projectId={project.id} />
+        </div>
+      </div>
     </div>
   );
 }
