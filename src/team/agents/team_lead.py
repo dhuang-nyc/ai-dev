@@ -43,7 +43,8 @@ When the user requests changes — whether tasks are still pending, in progress,
 5. To wholesale replace all remaining pending tasks, use `replace_all_tasks`.
 6. Never modify tasks with status `in_progress`/`pr_open`/`done`.
 7. Use `abort_task` for scope that's been removed. Tell user what changed and why.
-8. Call `update_tech_spec` only if architecture changes materially.
+8. Use `delete_task` to permanently remove pending or aborted tasks (e.g. obsolete leftovers).
+9. Call `update_tech_spec` only if architecture changes materially.
 
 ## TechSpec Format (concise — no exhaustive field/endpoint listings)
 
@@ -96,7 +97,10 @@ TOOLS = [
                     "type": "integer",
                     "description": "Existing task ID to update. Omit to create.",
                 },
-                "title": {"type": "string", "description": "Task title (≤10 words)."},
+                "title": {
+                    "type": "string",
+                    "description": "Task title (≤10 words).",
+                },
                 "description": {
                     "type": "string",
                     "description": "1-2 sentence summary.",
@@ -151,7 +155,12 @@ TOOLS = [
                             "claude_prompt": {"type": "string"},
                             "priority": {"type": "integer"},
                         },
-                        "required": ["title", "description", "claude_prompt", "priority"],
+                        "required": [
+                            "title",
+                            "description",
+                            "claude_prompt",
+                            "priority",
+                        ],
                     },
                 },
             },
@@ -169,6 +178,21 @@ TOOLS = [
                 "reason": {"type": "string", "description": "Why."},
             },
             "required": ["task_id", "reason"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "delete_task",
+        "description": "Permanently delete a pending or aborted task. Cannot delete in_progress/pr_open/done tasks.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "task_id": {
+                    "type": "integer",
+                    "description": "Task ID to delete.",
+                },
+            },
+            "required": ["task_id"],
             "additionalProperties": False,
         },
     },
@@ -274,7 +298,9 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
         for t in pending:
             if t.pr_url:
                 try:
-                    close_pull_request(t.pr_url, reason="Replaced by new task list")
+                    close_pull_request(
+                        t.pr_url, reason="Replaced by new task list"
+                    )
                 except Exception as exc:
                     logger.warning("Could not close PR %s: %s", t.pr_url, exc)
             aborted_ids.append(t.id)
@@ -296,9 +322,7 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
                 order=start_order + idx,
             )
             created.append({"id": task.id, "title": task.title})
-        return json.dumps(
-            {"deleted_pending": aborted_ids, "created": created}
-        )
+        return json.dumps({"deleted_pending": aborted_ids, "created": created})
 
     if name == "abort_task":
         from .dev_agent import close_pull_request
@@ -328,6 +352,25 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
         return json.dumps(
             {"id": task.id, "title": task.title, "status": task.status}
         )
+
+    if name == "delete_task":
+        try:
+            task = DevTask.objects.get(
+                id=tool_input["task_id"], project_id=project_id
+            )
+        except DevTask.DoesNotExist:
+            return json.dumps(
+                {"error": f"Task {tool_input['task_id']} not found."}
+            )
+        if task.status not in (DevTask.STATUS_PENDING, DevTask.STATUS_ABORTED):
+            return json.dumps(
+                {
+                    "error": f"Cannot delete task {task.id} — status is '{task.status}'. Only pending or aborted tasks can be deleted."
+                }
+            )
+        task_id, task_title = task.id, task.title
+        task.delete()
+        return json.dumps({"deleted": True, "id": task_id, "title": task_title})
 
     if name == "update_tech_spec":
         content = tool_input["content"]
