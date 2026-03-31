@@ -4,13 +4,14 @@ import time
 
 from anthropic import Anthropic
 
-from .utils.helpers import compute_cost
+from .utils.helpers import compute_cost, trim_history
 
 logger = logging.getLogger(__name__)
 
 TECH_LEAD_MODEL = "claude-opus-4-6"
+UTILITY_MODEL = "claude-sonnet-4-6"
 CLIENT = Anthropic()
-MAX_TOKENS = 8000
+MAX_TOKENS = 4096
 
 
 # ---------------------------------------------------------------------------
@@ -18,11 +19,22 @@ MAX_TOKENS = 8000
 # ---------------------------------------------------------------------------
 
 
-def _build_system_prompt(project) -> str:
+def _build_system_prompt(project, tech_spec_summary: str | None = None) -> str:
+    spec_section = ""
+    if tech_spec_summary:
+        spec_section = f"""
+## Current TechSpec (summary)
+{tech_spec_summary}
+
+> This is a summary. Call `get_tech_spec` to read the full spec when you need exact details.
+"""
+    else:
+        spec_section = "\n## TechSpec: Not yet created.\n"
+
     return f"""You are a Tech Lead in an AI dev team.
 
 Project: {project.name} (ID: {project.id}, status: `{project.status}`)
-
+{spec_section}
 ## Step 1 — Write TechSpec (no tasks yet)
 1. Ask ONE clarifying question at a time.
 2. When ready, call `update_tech_spec` with a concise spec (format below).
@@ -69,6 +81,9 @@ Only if any remain.
 - `claude_prompt`: focused implementation instructions — what to build, key file paths, end with "Stage and commit all changes when done." Reference the tech spec rather than repeating it.
 - `priority`: 1-5
 - `blocked_by_ids`: dependency task IDs
+
+## Context Note
+Older conversation messages may be trimmed for efficiency. The tech spec summary above and `list_tasks`/`get_tech_spec` tools give you the current ground truth — rely on those over old messages.
 """
 
 
@@ -120,6 +135,16 @@ TOOLS = [
                 },
             },
             "required": ["title", "description", "claude_prompt", "priority"],
+            "additionalProperties": False,
+        },
+    },
+    {
+        "name": "get_tech_spec",
+        "description": "Retrieve the full tech spec. Use when you need exact details beyond the summary in the system prompt.",
+        "input_schema": {
+            "type": "object",
+            "properties": {},
+            "required": [],
             "additionalProperties": False,
         },
     },
@@ -372,6 +397,15 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
         task.delete()
         return json.dumps({"deleted": True, "id": task_id, "title": task_title})
 
+    if name == "get_tech_spec":
+        try:
+            spec = TechSpec.objects.get(project_id=project_id)
+            return json.dumps(
+                {"content": spec.content, "version": spec.version}
+            )
+        except TechSpec.DoesNotExist:
+            return json.dumps({"error": "No tech spec exists yet."})
+
     if name == "update_tech_spec":
         content = tool_input["content"]
         try:
@@ -431,6 +465,35 @@ def _execute_tool(name: str, tool_input: dict, project_id: int) -> str:
 # ---------------------------------------------------------------------------
 
 
+MAX_HISTORY_TOKENS = 30_000
+
+
+def _tech_spec_summary(project_id: int) -> str | None:
+    """Build a compact summary from the stored tech spec (Overview + Goals)."""
+    from team.models import TechSpec
+
+    try:
+        spec = TechSpec.objects.get(project_id=project_id)
+    except TechSpec.DoesNotExist:
+        return None
+
+    lines = spec.content.split("\n")
+    summary_parts = []
+    current_section = None
+    include_sections = {"overview", "goals & non-goals", "architecture", "implementation plan"}
+
+    for line in lines:
+        stripped = line.strip()
+        if stripped.startswith("## "):
+            current_section = stripped.lstrip("# ").strip().lower()
+        if current_section in include_sections:
+            summary_parts.append(line)
+
+    if summary_parts:
+        return "\n".join(summary_parts).strip() + f"\n\n(v{spec.version})"
+    return spec.content[:1500] + f"\n...\n(v{spec.version}, truncated)"
+
+
 def run_tech_lead_with_history(
     project_id: int, history: list[dict], new_user_message: str
 ) -> dict:
@@ -448,10 +511,12 @@ def run_tech_lead_with_history(
     from team.models import Project
 
     project = Project.objects.get(id=project_id)
-    system = _build_system_prompt(project)
+    spec_summary = _tech_spec_summary(project_id)
+    system = _build_system_prompt(project, tech_spec_summary=spec_summary)
 
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
     messages.append({"role": "user", "content": new_user_message})
+    messages = trim_history(messages, max_tokens=MAX_HISTORY_TOKENS)
 
     total_input_tokens = 0
     total_output_tokens = 0
@@ -463,6 +528,7 @@ def run_tech_lead_with_history(
             model=TECH_LEAD_MODEL,
             max_tokens=MAX_TOKENS,
             thinking={"type": "adaptive"},
+            cache_control={"type": "ephemeral"},
             system=system,
             tools=TOOLS,
             messages=messages,
@@ -544,8 +610,8 @@ Idea: {idea}
 
 def extract_project_info(idea: str) -> dict:
     response = CLIENT.messages.create(
-        model=TECH_LEAD_MODEL,
-        max_tokens=MAX_TOKENS,
+        model=UTILITY_MODEL,
+        max_tokens=256,
         messages=[
             {
                 "role": "user",
@@ -558,7 +624,7 @@ def extract_project_info(idea: str) -> dict:
 
 def extract_tasks(tech_spec: str) -> list[dict]:
     response = CLIENT.messages.create(
-        model=TECH_LEAD_MODEL,
+        model=UTILITY_MODEL,
         max_tokens=MAX_TOKENS,
         messages=[
             {

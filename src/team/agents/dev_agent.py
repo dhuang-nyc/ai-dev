@@ -3,10 +3,12 @@ Dev agent — pure functions, no Django ORM.
 All subprocess calls happen here; tasks.py wires in DB state.
 """
 
+import json
 import logging
 import os
 import re
 import subprocess
+from decimal import Decimal
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -132,6 +134,68 @@ def setup_workspace(workspace_name: str, repo_url: str, repo_name: str) -> Path:
     return repo_path
 
 
+def _process_stream_json(
+    proc: subprocess.Popen,
+    on_output: callable = None,
+    log_prefix: str = "claude",
+) -> tuple[list[str], Decimal | None]:
+    """
+    Read stream-json lines from a claude process, log human-readable content,
+    and extract cost from the final result event.
+    Returns (collected_text_lines, cost_usd).
+    """
+    text_lines: list[str] = []
+    cost_usd = None
+
+    for raw in proc.stdout:
+        line = raw.rstrip("\n")
+        if not line:
+            continue
+
+        try:
+            event = json.loads(line)
+        except (json.JSONDecodeError, ValueError):
+            text_lines.append(line)
+            logger.info("[%s] %s", log_prefix, line)
+            if on_output:
+                on_output(line)
+            continue
+
+        event_type = event.get("type", "")
+
+        if event_type == "assistant":
+            for block in event.get("message", {}).get("content", []):
+                btype = block.get("type", "")
+                if btype == "text":
+                    text = block.get("text", "")
+                    text_lines.append(text)
+                    logger.info("[%s] %s", log_prefix, text)
+                    if on_output:
+                        on_output(text)
+                elif btype == "tool_use":
+                    msg = f"[tool: {block.get('name', '?')}]"
+                    logger.info("[%s] %s", log_prefix, msg)
+                    if on_output:
+                        on_output(msg)
+
+        elif event_type == "result":
+            cost_usd = event.get("cost_usd")
+            result_text = event.get("result", "")
+            if result_text:
+                text_lines.append(result_text)
+            summary = (
+                f"Session complete — cost: ${cost_usd:.4f}"
+                if cost_usd is not None
+                else "Session complete."
+            )
+            logger.info("[%s] %s", log_prefix, summary)
+            if on_output:
+                on_output(summary)
+
+    decimal_cost = Decimal(str(cost_usd)) if cost_usd is not None else None
+    return text_lines, decimal_cost
+
+
 def run_claude_agent(
     repo_path: Path,
     branch: str,
@@ -139,12 +203,12 @@ def run_claude_agent(
     task_description: str,
     claude_prompt: str,
     on_output: callable = None,
-) -> str:
+) -> dict:
     """
-    Write SKILL.md to the repo, then invoke claude --print to handle the full
+    Write SKILL.md to the repo, then invoke claude to handle the full
     branch → implement → commit → push → PR workflow.
     Streams output line-by-line; calls on_output(line) for each line if provided.
-    Returns the PR URL parsed from Claude's output.
+    Returns {"pr_url": str, "cost_usd": Decimal | None}.
     """
     (repo_path / "SKILL.md").write_text(_DEV_TASK_SKILL.read_text())
 
@@ -165,6 +229,7 @@ def run_claude_agent(
             "claude",
             "--print",
             prompt,
+            "--output-format", "stream-json",
             "--allowedTools",
             "Edit,Write,Read,Bash,Glob,Grep",
         ],
@@ -175,27 +240,27 @@ def run_claude_agent(
         env=env,
     )
 
-    lines: list[str] = []
-    for raw in proc.stdout:
-        line = raw.rstrip("\n")
-        lines.append(line)
-        logger.info("[claude] %s", line)
-        if on_output:
-            on_output(line)
+    text_lines, cost_usd = _process_stream_json(proc, on_output, "claude")
 
     proc.wait(timeout=1800)
     if proc.returncode != 0:
         raise RuntimeError(
-            f"claude exited with rc={proc.returncode}:\n" + "\n".join(lines[-100:])
+            f"claude exited with rc={proc.returncode}:\n"
+            + "\n".join(text_lines[-100:])
         )
 
-    for line in reversed(lines):
+    full_text = "\n".join(text_lines)
+    for line in reversed(full_text.split("\n")):
         stripped = line.strip()
         if stripped.startswith("PR_URL:"):
-            return stripped.split("PR_URL:", 1)[1].strip()
+            return {
+                "pr_url": stripped.split("PR_URL:", 1)[1].strip(),
+                "cost_usd": cost_usd,
+            }
 
     raise RuntimeError(
-        f"Could not find PR_URL in claude output:\n" + "\n".join(lines[-100:])
+        f"Could not find PR_URL in claude output:\n"
+        + "\n".join(text_lines[-100:])
     )
 
 
@@ -221,25 +286,17 @@ def run_claude_agent_for_pr_comment(
     repo_full_name: str = "",
     pr_number: int | None = None,
     on_output: callable = None,
-) -> None:
+) -> Decimal | None:
     """
     Run Claude Code to handle a PR review comment.
-
-    - Writes PR_COMMENT_SKILL.md to the repo so Claude has workflow instructions.
-    - If the comment contains change-request keywords, Claude will implement the
-      change, commit, push, then reply in the original thread.
-    - Otherwise Claude answers the question in-thread without touching the code.
-    - For pull_request_review_comment events the reply goes back into the diff
-      thread via the GitHub replies API; other events get a top-level PR comment.
+    Returns the session cost in USD, or None if unavailable.
     """
     env = os.environ.copy()
     if DEV_GITHUB_TOKEN:
         env["GH_TOKEN"] = DEV_GITHUB_TOKEN
 
-    # Write the skill guide so Claude can reference it
     (repo_path / "PR_COMMENT_SKILL.md").write_text(_PR_COMMENT_SKILL.read_text())
 
-    # Build the exact reply command for this event type
     if event_type == "review_comment" and comment_id and repo_full_name and pr_number:
         reply_cmd = (
             f"gh api -X POST repos/{repo_full_name}/pulls/{pr_number}"
@@ -272,6 +329,7 @@ def run_claude_agent_for_pr_comment(
             "claude",
             "--print",
             prompt,
+            "--output-format", "stream-json",
             "--allowedTools",
             "Edit,Write,Read,Bash,Glob,Grep",
         ],
@@ -282,15 +340,13 @@ def run_claude_agent_for_pr_comment(
         env=env,
     )
 
-    for raw in proc.stdout:
-        line = raw.rstrip("\n")
-        logger.info("[claude-pr-comment] %s", line)
-        if on_output:
-            on_output(line)
+    _, cost_usd = _process_stream_json(proc, on_output, "claude-pr-comment")
 
     proc.wait(timeout=1800)
     if proc.returncode != 0:
         raise RuntimeError(f"claude exited with rc={proc.returncode}")
+
+    return cost_usd
 
 
 def cleanup_merged_branch(repo_path: Path, branch: str) -> None:

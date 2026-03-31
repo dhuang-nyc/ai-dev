@@ -5,13 +5,13 @@ from decimal import Decimal
 
 from anthropic import Anthropic
 
-from .utils.helpers import compute_cost
+from .utils.helpers import compute_cost, trim_history
 
 logger = logging.getLogger(__name__)
 
 PM_MODEL = "claude-sonnet-4-6"
 CLIENT = Anthropic()
-MAX_TOKENS = 8000
+MAX_TOKENS = 4096
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +275,7 @@ def run_pm_with_history(
     """
     messages = [{"role": m["role"], "content": m["content"]} for m in history]
     messages.append({"role": "user", "content": new_user_message})
+    messages = trim_history(messages, max_tokens=30_000)
 
     brief_result = None
     project_created = None
@@ -287,6 +288,7 @@ def run_pm_with_history(
         response = CLIENT.messages.create(
             model=PM_MODEL,
             max_tokens=MAX_TOKENS,
+            cache_control={"type": "ephemeral"},
             system=SYSTEM_PROMPT,
             tools=TOOLS,
             messages=messages,

@@ -179,7 +179,7 @@ def run_dev_task(task_id: int):
             task.save(update_fields=["agent_log"])
             logger.info("[task-%d] %s", task_id, line)
 
-        pr_url = run_claude_agent(
+        result = run_claude_agent(
             repo_path,
             branch,
             task.title,
@@ -188,10 +188,12 @@ def run_dev_task(task_id: int):
             on_output=_stream,
         )
 
-        task.pr_url = pr_url
+        task.pr_url = result["pr_url"]
         task.status = DevTask.STATUS_PR_OPEN
-        task.save(update_fields=["pr_url", "status"])
-        _log(task, f"PR opened: {pr_url}")
+        if result.get("cost_usd") is not None:
+            task.total_cost = (task.total_cost or 0) + result["cost_usd"]
+        task.save(update_fields=["pr_url", "status", "total_cost"])
+        _log(task, f"PR opened: {result['pr_url']}")
 
     except Exception as exc:
         logger.exception("run_dev_task failed for task %s", task_id)
@@ -325,7 +327,7 @@ def answer_pr_question(
         def _stream(line: str):
             _log(task, line)
 
-        run_claude_agent_for_pr_comment(
+        cost_usd = run_claude_agent_for_pr_comment(
             repo_path=repo_path,
             branch=task.branch_name,
             pr_url=task.pr_url or "",
@@ -337,6 +339,10 @@ def answer_pr_question(
             pr_number=pr_number,
             on_output=_stream,
         )
+
+        if cost_usd is not None:
+            task.total_cost = (task.total_cost or 0) + cost_usd
+            task.save(update_fields=["total_cost"])
 
         _log(task, "Feedback handling complete.")
 
