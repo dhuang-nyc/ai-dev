@@ -164,7 +164,8 @@ def _project_cost_summary(project_id):
     ).aggregate(cost=Sum("token_cost"), time=Sum("response_time_ms"))
 
     dt = DevTask.objects.filter(project_id=project_id).aggregate(
-        cost=Sum("total_cost")
+        cost=Sum("total_cost"),
+        time=Sum("total_duration_ms"),
     )
 
     task_time_ms = 0
@@ -178,7 +179,7 @@ def _project_cost_summary(project_id):
         )
 
     total_cost = (tl["cost"] or 0) + (pm["cost"] or 0) + (dt["cost"] or 0)
-    total_time = (tl["time"] or 0) + (pm["time"] or 0) + task_time_ms
+    total_time = (tl["time"] or 0) + (pm["time"] or 0) + (dt["time"] or 0)
 
     return total_cost or None, total_time or None
 
