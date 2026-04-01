@@ -119,7 +119,10 @@ def setup_workspace(workspace_name: str, repo_url: str, repo_name: str) -> Path:
             _run(["git", "fetch", "--prune", "origin"], cwd=repo_path)
         except RuntimeError:
             # Corrupt ref state — nuke the packed-refs cache and retry
-            logger.warning("git fetch --prune failed in %s, clearing packed-refs and retrying", repo_path)
+            logger.warning(
+                "git fetch --prune failed in %s, clearing packed-refs and retrying",
+                repo_path,
+            )
             packed_refs = repo_path / ".git" / "packed-refs"
             if packed_refs.exists():
                 packed_refs.unlink()
@@ -138,7 +141,8 @@ def _process_stream_json(
     proc: subprocess.Popen,
     on_output: callable = None,
     log_prefix: str = "claude",
-) -> tuple[list[str], Decimal | None]:
+    log_tool_calls: bool = False,
+) -> tuple[list[str], Decimal | None, int | None]:
     """
     Read stream-json lines from a claude process, log human-readable content,
     and extract cost from the final result event.
@@ -146,6 +150,7 @@ def _process_stream_json(
     """
     text_lines: list[str] = []
     cost_usd = None
+    duration_ms = None
 
     for raw in proc.stdout:
         line = raw.rstrip("\n")
@@ -172,14 +177,26 @@ def _process_stream_json(
                     logger.info("[%s] %s", log_prefix, text)
                     if on_output:
                         on_output(text)
-                elif btype == "tool_use":
+                elif btype == "tool_use" and log_tool_calls:
                     msg = f"[tool: {block.get('name', '?')}]"
+                    msg += f" {json.dumps(block.get('input', {}))}"
+                    logger.info("[%s] %s", log_prefix, msg)
+                    if on_output:
+                        on_output(msg)
+                elif btype == "tool_result" and log_tool_calls:
+                    msg = f"[tool_result: {block.get('content', '?')}]"
+                    logger.info("[%s] %s", log_prefix, msg)
+                    if on_output:
+                        on_output(msg)
+                elif btype == "thinking":
+                    msg = f"[thinking: {block.get('thinking', '?')}]"
                     logger.info("[%s] %s", log_prefix, msg)
                     if on_output:
                         on_output(msg)
 
         elif event_type == "result":
-            cost_usd = event.get("cost_usd")
+            duration_ms = event.get("duration_ms")
+            cost_usd = event.get("total_cost_usd")
             result_text = event.get("result", "")
             if result_text:
                 text_lines.append(result_text)
@@ -193,7 +210,7 @@ def _process_stream_json(
                 on_output(summary)
 
     decimal_cost = Decimal(str(cost_usd)) if cost_usd is not None else None
-    return text_lines, decimal_cost
+    return text_lines, decimal_cost, duration_ms
 
 
 def run_claude_agent(
@@ -230,7 +247,8 @@ def run_claude_agent(
             "--print",
             prompt,
             "--verbose",
-            "--output-format", "stream-json",
+            "--output-format",
+            "stream-json",
             "--allowedTools",
             "Edit,Write,Read,Bash,Glob,Grep",
         ],
@@ -241,7 +259,9 @@ def run_claude_agent(
         env=env,
     )
 
-    text_lines, cost_usd = _process_stream_json(proc, on_output, "claude")
+    text_lines, cost_usd, duration_ms = _process_stream_json(
+        proc, on_output, "claude"
+    )
 
     proc.wait(timeout=1800)
     if proc.returncode != 0:
@@ -257,6 +277,7 @@ def run_claude_agent(
             return {
                 "pr_url": stripped.split("PR_URL:", 1)[1].strip(),
                 "cost_usd": cost_usd,
+                "duration_ms": duration_ms,
             }
 
     raise RuntimeError(
@@ -287,7 +308,7 @@ def run_claude_agent_for_pr_comment(
     repo_full_name: str = "",
     pr_number: int | None = None,
     on_output: callable = None,
-) -> Decimal | None:
+) -> tuple[Decimal | None, int | None]:
     """
     Run Claude Code to handle a PR review comment.
     Returns the session cost in USD, or None if unavailable.
@@ -296,9 +317,16 @@ def run_claude_agent_for_pr_comment(
     if DEV_GITHUB_TOKEN:
         env["GH_TOKEN"] = DEV_GITHUB_TOKEN
 
-    (repo_path / "PR_COMMENT_SKILL.md").write_text(_PR_COMMENT_SKILL.read_text())
+    (repo_path / "PR_COMMENT_SKILL.md").write_text(
+        _PR_COMMENT_SKILL.read_text()
+    )
 
-    if event_type == "review_comment" and comment_id and repo_full_name and pr_number:
+    if (
+        event_type == "review_comment"
+        and comment_id
+        and repo_full_name
+        and pr_number
+    ):
         reply_cmd = (
             f"gh api -X POST repos/{repo_full_name}/pulls/{pr_number}"
             f"/comments/{comment_id}/replies -f body='YOUR_REPLY'"
@@ -331,7 +359,8 @@ def run_claude_agent_for_pr_comment(
             "--print",
             prompt,
             "--verbose",
-            "--output-format", "stream-json",
+            "--output-format",
+            "stream-json",
             "--allowedTools",
             "Edit,Write,Read,Bash,Glob,Grep",
         ],
@@ -342,13 +371,15 @@ def run_claude_agent_for_pr_comment(
         env=env,
     )
 
-    _, cost_usd = _process_stream_json(proc, on_output, "claude-pr-comment")
+    _, cost_usd, duration_ms = _process_stream_json(
+        proc, on_output, "claude-pr-comment"
+    )
 
     proc.wait(timeout=1800)
     if proc.returncode != 0:
         raise RuntimeError(f"claude exited with rc={proc.returncode}")
 
-    return cost_usd
+    return cost_usd, duration_ms
 
 
 def cleanup_merged_branch(repo_path: Path, branch: str) -> None:

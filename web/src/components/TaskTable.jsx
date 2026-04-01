@@ -30,7 +30,14 @@ const PR_ICON = (
   </svg>
 );
 
-function TaskRow({ task, index, onOpenTask, onOpenLog, onSelectProject, onDelete }) {
+function TaskRow({
+  task,
+  index,
+  onOpenTask,
+  onOpenLog,
+  onSelectProject,
+  onDelete,
+}) {
   const hasLog = task.has_logs || task.agent_log?.trim();
   const duration = task.completed_at - task.started_at;
   const deletable = task.status === "pending" || task.status === "aborted";
@@ -109,7 +116,10 @@ function TaskRow({ task, index, onOpenTask, onOpenLog, onSelectProject, onDelete
               💬
             </button>
           )}
-          <AgentCostSummary cost={task.total_cost} timeMs={duration} />
+          <AgentCostSummary
+            cost={task.total_cost}
+            timeMs={task.total_duration_ms}
+          />
         </div>
       </div>
 
@@ -128,13 +138,24 @@ function TaskRow({ task, index, onOpenTask, onOpenLog, onSelectProject, onDelete
           <button
             onClick={(e) => {
               e.stopPropagation();
-              if (window.confirm(`Delete task "${task.title}"?`)) onDelete(task.id);
+              if (window.confirm(`Delete task "${task.title}"?`))
+                onDelete(task.id);
             }}
             className="w-6 h-6 flex items-center justify-center rounded-md text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors opacity-0 group-hover/row:opacity-100"
             title="Delete task"
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            <svg
+              className="w-3.5 h-3.5"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+              />
             </svg>
           </button>
         )}
@@ -174,7 +195,9 @@ export default function TaskTable({
 
   function handleSaved(updated) {
     setSelectedId(null);
-    onTasksChange?.(tasks.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)));
+    onTasksChange?.(
+      tasks.map((t) => (t.id === updated.id ? { ...t, ...updated } : t)),
+    );
   }
 
   async function handleDelete(taskId) {
@@ -201,7 +224,9 @@ export default function TaskTable({
             <div className="w-5 h-5 bg-indigo-500 rounded-md flex items-center justify-center text-white text-xs font-bold shrink-0">
               T
             </div>
-            <span className="text-sm font-semibold text-slate-700">{tableLabel}</span>
+            <span className="text-sm font-semibold text-slate-700">
+              {tableLabel}
+            </span>
           </div>
           <div className="flex items-center gap-2">
             {Object.entries(counts).map(([status, n]) => (

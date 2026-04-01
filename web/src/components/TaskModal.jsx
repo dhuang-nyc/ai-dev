@@ -4,21 +4,22 @@ import { api } from "../api";
 import { TASK_STATUS_COLORS, TASK_STATUS_LABELS } from "../utils";
 
 export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
-  const [task, setTask]       = useState(null);
+  const [task, setTask] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving]   = useState(false);
+  const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [error, setError]     = useState(null);
-  const [dirty, setDirty]     = useState(false);
+  const [error, setError] = useState(null);
+  const [dirty, setDirty] = useState(false);
 
-  const [title, setTitle]           = useState("");
+  const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
-  const [prompt, setPrompt]         = useState("");
-  const [status, setStatus]         = useState("");
+  const [prompt, setPrompt] = useState("");
+  const [status, setStatus] = useState("");
 
   const load = useCallback(() => {
     setLoading(true);
-    api.getTask(taskId)
+    api
+      .getTask(taskId)
       .then((t) => {
         setTask(t);
         setTitle(t.title);
@@ -30,11 +31,15 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
       .catch(() => setLoading(false));
   }, [taskId]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    load();
+  }, [load]);
 
   // Close on Escape
   useEffect(() => {
-    function onKey(e) { if (e.key === "Escape") onClose(); }
+    function onKey(e) {
+      if (e.key === "Escape") onClose();
+    }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
@@ -42,7 +47,10 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
   const editable = task && task.status === "pending";
 
   function handleChange(setter) {
-    return (e) => { setter(e.target.value); setDirty(true); };
+    return (e) => {
+      setter(e.target.value);
+      setDirty(true);
+    };
   }
 
   async function handleSave() {
@@ -80,12 +88,15 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
     }
   }
 
-  const deletable = task && (task.status === "pending" || task.status === "aborted");
+  const deletable =
+    task && (task.status === "pending" || task.status === "aborted");
 
   return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center sm:p-4 bg-black/40 backdrop-blur-sm animate-fadein"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
     >
       <div className="bg-white sm:rounded-2xl shadow-2xl border border-slate-200 w-full h-dvh sm:h-auto sm:max-w-2xl sm:max-h-[90vh] flex flex-col">
         {/* Header */}
@@ -94,18 +105,25 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
             {task && (
               <select
                 value={status}
-                onChange={(e) => { setStatus(e.target.value); setDirty(true); }}
+                onChange={(e) => {
+                  setStatus(e.target.value);
+                  setDirty(true);
+                }}
                 className={`text-xs font-semibold px-2.5 py-1 rounded-full border-0 cursor-pointer shrink-0 focus:outline-none focus:ring-2 focus:ring-indigo-400 ${
                   TASK_STATUS_COLORS[status] ?? "bg-slate-100 text-slate-600"
                 }`}
               >
                 {Object.entries(TASK_STATUS_LABELS).map(([val, label]) => (
-                  <option key={val} value={val}>{label}</option>
+                  <option key={val} value={val}>
+                    {label}
+                  </option>
                 ))}
               </select>
             )}
             {task?.branch_name && (
-              <span className="text-xs text-slate-400 font-mono truncate">{task.branch_name}</span>
+              <span className="text-xs text-slate-400 font-mono truncate">
+                {task.branch_name}
+              </span>
             )}
           </div>
           <button
@@ -138,7 +156,9 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
                     onChange={handleChange(setTitle)}
                   />
                 ) : (
-                  <p className="text-sm font-semibold text-slate-800">{task.title}</p>
+                  <p className="text-sm font-semibold text-slate-800">
+                    {task.title}
+                  </p>
                 )}
               </div>
 
@@ -154,8 +174,12 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 text-sm text-indigo-600 hover:text-indigo-800 hover:underline font-medium"
                   >
-                    <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 16 16">
-                      <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354Z"/>
+                    <svg
+                      className="w-4 h-4 shrink-0"
+                      fill="currentColor"
+                      viewBox="0 0 16 16"
+                    >
+                      <path d="M1.5 3.25a2.25 2.25 0 1 1 3 2.122v5.256a2.251 2.251 0 1 1-1.5 0V5.372A2.25 2.25 0 0 1 1.5 3.25Zm5.677-.177L9.573.677A.25.25 0 0 1 10 .854V2.5h1A2.5 2.5 0 0 1 13.5 5v5.628a2.251 2.251 0 1 1-1.5 0V5a1 1 0 0 0-1-1h-1v1.646a.25.25 0 0 1-.427.177L7.177 3.427a.25.25 0 0 1 0-.354Z" />
                     </svg>
                     {task.pr_url.replace("https://github.com/", "")}
                   </a>
@@ -176,7 +200,11 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
                   />
                 ) : (
                   <p className="text-sm text-slate-700 whitespace-pre-wrap">
-                    {task.description || <span className="text-slate-400 italic">No description.</span>}
+                    {task.description || (
+                      <span className="text-slate-400 italic">
+                        No description.
+                      </span>
+                    )}
                   </p>
                 )}
               </div>
@@ -195,11 +223,38 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
                   />
                 ) : (
                   <pre className="text-xs font-mono text-slate-700 bg-slate-50 border border-slate-200 rounded-lg px-3 py-2.5 overflow-x-auto whitespace-pre-wrap">
-                    {task.claude_prompt || <span className="text-slate-400 italic">No prompt.</span>}
+                    {task.claude_prompt || (
+                      <span className="text-slate-400 italic">No prompt.</span>
+                    )}
                   </pre>
                 )}
               </div>
 
+              {/* Timestamps */}
+              {task.started_at && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Started At
+                  </label>
+                  <p className="text-sm text-slate-700">
+                    {task.started_at
+                      ? new Date(task.started_at).toLocaleString()
+                      : "Not started."}
+                  </p>
+                </div>
+              )}
+              {task.completed_at && (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">
+                    Completed At
+                  </label>
+                  <p className="text-sm text-slate-700">
+                    {task.completed_at
+                      ? new Date(task.completed_at).toLocaleString()
+                      : "Not completed."}
+                  </p>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -219,7 +274,9 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
               )}
               <span className="text-xs text-slate-400">
                 {!editable && !deletable && (
-                  <span className="italic">Fields locked — status only is editable</span>
+                  <span className="italic">
+                    Fields locked — status only is editable
+                  </span>
                 )}
                 {error && <span className="text-red-500">{error}</span>}
               </span>
@@ -243,6 +300,6 @@ export default function TaskModal({ taskId, onClose, onSaved, onDeleted }) {
         )}
       </div>
     </div>,
-    document.body
+    document.body,
   );
 }

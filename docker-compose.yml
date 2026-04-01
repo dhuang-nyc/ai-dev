@@ -48,6 +48,8 @@ services:
       - "5555:5555"
     env_file:
       - .env
+    environment:
+      - FLOWER_UNAUTHENTICATED_API=true
     depends_on:
       - redis
 

@@ -125,6 +125,7 @@ def list_active_tasks(request):
             has_logs=bool(t.agent_log and t.agent_log.strip()),
             blocked_by=[b.id for b in t.blocked_by.all()],
             total_cost=t.total_cost,
+            total_duration_ms=t.total_duration_ms,
             started_at=t.started_at,
             completed_at=t.completed_at,
         )
@@ -172,7 +173,9 @@ def _project_cost_summary(project_id):
         started_at__isnull=False,
         completed_at__isnull=False,
     ).only("started_at", "completed_at"):
-        task_time_ms += int((t.completed_at - t.started_at).total_seconds() * 1000)
+        task_time_ms += int(
+            (t.completed_at - t.started_at).total_seconds() * 1000
+        )
 
     total_cost = (tl["cost"] or 0) + (pm["cost"] or 0) + (dt["cost"] or 0)
     total_time = (tl["time"] or 0) + (pm["time"] or 0) + task_time_ms
@@ -193,18 +196,20 @@ def list_projects(request):
     result = []
     for p in projects:
         cost, time_ms = _project_cost_summary(p.id)
-        result.append(ProjectListSchema(
-            id=p.id,
-            name=p.name,
-            description=p.description,
-            status=p.status,
-            github_repo_url=p.github_repo_url,
-            created_at=p.created_at,
-            has_tech_spec=p.has_tech_spec,
-            task_count=p.task_count,
-            total_cost=cost,
-            total_agent_time_ms=time_ms,
-        ))
+        result.append(
+            ProjectListSchema(
+                id=p.id,
+                name=p.name,
+                description=p.description,
+                status=p.status,
+                github_repo_url=p.github_repo_url,
+                created_at=p.created_at,
+                has_tech_spec=p.has_tech_spec,
+                task_count=p.task_count,
+                total_cost=cost,
+                total_agent_time_ms=time_ms,
+            )
+        )
     return result
 
 
@@ -461,7 +466,7 @@ def run_dev_agents(request):
                 s
                 for s, _ in DevTask.STATUS_CHOICES
                 if s not in (DevTask.STATUS_DONE, DevTask.STATUS_ABORTED)
-            ]
+            ],
         )
         .order_by("project", "order", "priority")
     )
@@ -510,6 +515,7 @@ def get_tasks(request, project_id: int):
             agent_log=t.agent_log,
             claude_prompt=t.claude_prompt,
             total_cost=t.total_cost,
+            total_duration_ms=t.total_duration_ms,
             started_at=t.started_at,
             completed_at=t.completed_at,
         )
@@ -536,6 +542,7 @@ def get_task(request, task_id: int):
         agent_log=t.agent_log,
         claude_prompt=t.claude_prompt,
         total_cost=t.total_cost,
+        total_duration_ms=t.total_duration_ms,
         started_at=t.started_at,
         completed_at=t.completed_at,
     )
@@ -595,6 +602,7 @@ def update_task(request, task_id: int, payload: UpdateTaskSchema):
         agent_log=t.agent_log,
         claude_prompt=t.claude_prompt,
         total_cost=t.total_cost,
+        total_duration_ms=t.total_duration_ms,
         started_at=t.started_at,
         completed_at=t.completed_at,
     )

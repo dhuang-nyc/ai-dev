@@ -192,7 +192,18 @@ def run_dev_task(task_id: int):
         task.status = DevTask.STATUS_PR_OPEN
         if result.get("cost_usd") is not None:
             task.total_cost = (task.total_cost or 0) + result["cost_usd"]
-        task.save(update_fields=["pr_url", "status", "total_cost"])
+        if result.get("duration_ms") is not None:
+            task.total_duration_ms = (task.total_duration_ms or 0) + result[
+                "duration_ms"
+            ]
+        task.save(
+            update_fields=[
+                "pr_url",
+                "status",
+                "total_cost",
+                "total_duration_ms",
+            ]
+        )
         _log(task, f"PR opened: {result['pr_url']}")
 
     except Exception as exc:
@@ -327,7 +338,7 @@ def answer_pr_question(
         def _stream(line: str):
             _log(task, line)
 
-        cost_usd = run_claude_agent_for_pr_comment(
+        cost_usd, duration_ms = run_claude_agent_for_pr_comment(
             repo_path=repo_path,
             branch=task.branch_name,
             pr_url=task.pr_url or "",
@@ -342,8 +353,9 @@ def answer_pr_question(
 
         if cost_usd is not None:
             task.total_cost = (task.total_cost or 0) + cost_usd
-            task.save(update_fields=["total_cost"])
-
+        if duration_ms is not None:
+            task.total_duration_ms = (task.total_duration_ms or 0) + duration_ms
+        task.save(update_fields=["total_cost", "total_duration_ms"])
         _log(task, "Feedback handling complete.")
 
     except Exception as exc:
@@ -356,7 +368,9 @@ def answer_pr_question(
 
 
 @shared_task(bind=True, max_retries=3, default_retry_delay=5)
-def process_pm_message(self, pm_conversation_id: int, assistant_message_id: int):
+def process_pm_message(
+    self, pm_conversation_id: int, assistant_message_id: int
+):
     from .agents.product_manager import run_pm_with_history
     from .models import PMConversation, PMMessage
 
@@ -365,7 +379,9 @@ def process_pm_message(self, pm_conversation_id: int, assistant_message_id: int)
         assistant_msg = PMMessage.objects.get(id=assistant_message_id)
 
         all_messages = list(
-            conversation.messages.exclude(id=assistant_message_id).order_by("created_at")
+            conversation.messages.exclude(id=assistant_message_id).order_by(
+                "created_at"
+            )
         )
 
         if not all_messages:
@@ -374,10 +390,14 @@ def process_pm_message(self, pm_conversation_id: int, assistant_message_id: int)
             assistant_msg.save()
             return
 
-        history = [{"role": m.role, "content": m.content} for m in all_messages[:-1]]
+        history = [
+            {"role": m.role, "content": m.content} for m in all_messages[:-1]
+        ]
         new_user_message = all_messages[-1].content
 
-        result = run_pm_with_history(pm_conversation_id, history, new_user_message)
+        result = run_pm_with_history(
+            pm_conversation_id, history, new_user_message
+        )
 
         assistant_msg.content = result["response"]
         assistant_msg.processing = False

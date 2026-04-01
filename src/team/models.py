@@ -121,6 +121,7 @@ class DevTask(BaseModel):
     total_cost = models.DecimalField(
         max_digits=10, decimal_places=6, null=True, blank=True
     )
+    total_duration_ms = models.IntegerField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
 

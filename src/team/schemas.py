@@ -37,6 +37,7 @@ class DevTaskSchema(Schema):
     agent_log: str
     claude_prompt: str
     total_cost: Optional[Decimal] = None
+    total_duration_ms: Optional[int] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
@@ -93,6 +94,7 @@ class DashboardTaskSchema(Schema):
     blocked_by: list[int]
     has_logs: bool
     total_cost: Optional[Decimal] = None
+    total_duration_ms: Optional[int] = None
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
 
