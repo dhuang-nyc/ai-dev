@@ -257,7 +257,7 @@ def upsert_github_repo(project_name: str, description: str = "", readme_content:
     payload = {
         "name": repo_name,
         "description": (description[:350] if description else ""),
-        "private": False,
+        "private": True,
         "auto_init": True,
     }
     resp = httpx.post(create_url, json=payload, headers=headers, timeout=15)
